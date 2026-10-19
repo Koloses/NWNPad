@@ -61,8 +61,21 @@ LB / RB switch tabs: Inventory, Character, Quickbar, Spells, Journal, Map, Syste
 * **Quickbar** - all 36 slots with the button that triggers each one. A opens the game's
   assign wheel for the slot (spells, feats, skills, items, commands), X uses the slot,
   Y makes the set active.
-* **Spells, Journal, Map, System** - the game's own panels with the gamepad cursor;
-  LB / RB keep switching tabs.
+* **Spells** - spells of each casting class by level (LT / RT or d-pad left / right change the
+  level, Y the class). A casts (then pick the target as usual), X puts the spell on the
+  quickbar (choose the slot, A places it). Prepared casters (wizard, cleric ...) press View to
+  prepare: A on a slot picks a spell, X clears it; new preparations are ready after resting.
+  The right pane shows the spell's description (right stick scrolls).
+* **Journal** - active and completed quests (X switches), the newest entry of the selected
+  quest on the right.
+* **Map** - explored part of the current area with your position and facing, party members
+  and map notes. Left stick pans, LT / RT zoom, d-pad jumps between notes, Y re-centres.
+* **System** - resume, quick save, save game (new save or overwrite, A twice to confirm),
+  load game (list with previews), rest, save character, the game's option screens and exit
+  to the main menu.
+
+Item descriptions (the examine text) are shown in the details pane of the inventory, loot
+and merchant windows; the right stick scrolls them.
 
 ### Conversations
 
@@ -71,7 +84,7 @@ D-pad / left stick choose a reply, A answers (or continues), B leaves.
 ### Loot (chests, corpses, bags)
 
 D-pad choose, A takes the item, Y takes everything, X examines, LB / RB change the page,
-B closes.
+B closes. The selected item's description is shown on the right.
 
 ### Merchants
 

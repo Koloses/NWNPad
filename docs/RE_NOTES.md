@@ -119,3 +119,41 @@ CGuiMan: +0x58 captured object (radial 'RMnu' 0x524d6e75, action target 'AcTg' 0
 Front-end clicks must go through CGuiMan::HandleLMouseDown/Up (the in-game input path ignores them).
 CGuiInGame (Win): +0x70 dialog panel, +0x78 char sheet, +0x60 quickbar, +0x58 party bar, +0x68 compass, +0xa8 action queue,
 +0xb0 player state bar, +0x3a0 popup array, +0x3c4 popup count.
+
+## Spells (Win)
+CNWCCreatureStats: class info at +0x148 + i*0x150: known spells CExoArrayList<uint32>[10] at +0 (stride 0x10),
+memorized CExoArrayList<CNWCStats_Spell*>[10] at +0xa0, spells-per-day left uint8[10] at +0x140, class id +0x14d, level +0x14e.
+CNWCStats_Spell: id +0, ready +4, metamagic +8 (byte), domain +0x10.
+Spell "menu id" (quickbar / radial): id bits 0-15, spell level 24-27, class index bits 28-29 + bit 38, metamagic 31-36,
+bit 37 spontaneous conversion.
+Cast: CGuiQuickButton::ButtonActionCastSpell 0x140858790 reads only this+0x110 (menu id) -> game targeting mode.
+Quickbar: CGuiQuickButton::SetButtonSpellMenuID 0x1408678d0 (button, menu id).
+Prepare: SendPlayerToServerSpellMemorize 0x1407c2370 (msg, class idx, spell, slot, domain level, meta) = message 6/0x10;
+clear: message 6/0x11 bytes (class idx, level, slot). Send: CNWCMessage::SendPlayerToServerMessage 0x1407c10c0.
+classes.2da SpellCaster / MemorizesSpells / SpellTableColumn; spells.2da Name / IconResRef / SpellDesc / SubRadSpell1-5.
+
+## Journal (Win)
+CClientExoAppInternal+0x70 CNWCJournal: done list +0, active list +0x28 (CNWCSortedJournalArrayList: entries +0,
+count +8, sorted index array +0x10). SJournalEntry 0x50: name loc +0, text loc +0x10, day +0x20, time +0x24,
+tag +0x28, priority +0x38, state +0x3c, picture +0x40, completed +0x44, displayed +0x48, updated +0x4c.
+The server sends quests only while the quest screen is open: message 0x1c/10 open, 0x1c/11 closed.
+Text: CExoLocString::GetString(lang = internal+0x200, out, gender 0, true) (export).
+
+## Map (Win)
+CNWCArea: width +0xc, height +0x10 (tiles of 10 m), name CExoString +0x238, tiles +0x298 (0x60 each),
+map pins +0x2b8 / count +0x2c0. CNWCTile: orientation +0x24 (quarter turns), explored +0x30, tile data +0x40
+(map icon resref at +0x21). CNWCMapPin: object position +0x38, enabled +0x170, note CExoString +0x178.
+
+## Save / load (Win)
+CSaveGameList ctor 0x140813550 (0x30 bytes: dir names CExoString[] +0, CFileInfo[] +0x10 (0x20 each: file name,
+year +0x10 month +0x12 day +0x14 hour +0x16 minute +0x18), order int[] +0x20 / count +0x28). Dir = "NNNNNN - name".
+Save: internal 0x1406dc910 (internal, number, name, module name (module+0x18), overwrite dir or "") = message 3/4.
+Load: internal 0x1406dc8f0 (internal, number, name, .sav file name without extension, 0) = message 3/5.
+COptionsPanel (GIG+0xd8, toggled by CGuiInGame::HandleOptionsButton 0x1406f5d30): button callbacks {obj, fn} at
+Load +0x240, Save +0x328, SaveChar +0x410, Video +0x4f8, Controls +0x6c8, Exit +0x7b0, Resume +0x898, Game +0x980,
+X +0xa68; the sound button is removed in EE.
+
+## Item descriptions
+Examine request: CNWCMessage::SendPlayerToServerInput_Examine 0x1407be580 (msg, id); reply handled by
+HandleServerToPlayerExamineGui_ItemData 0x140798ce0, which fills StringGob texts (SetText / AddText / AddLine
+exports) of a new examine window; capture the outermost calls and close the window with CGuiModalPanel::Deactivate.

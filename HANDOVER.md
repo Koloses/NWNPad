@@ -37,7 +37,13 @@ Hooks (MinHook):
 | `uikit.*` | theme, panels, pad glyphs, hint bar |
 | `hud.*` | gamepad HUD; hides the game's quickbar, party bar, action queue, state bar, chat, compass |
 | `dialog.*` | conversation window |
-| `hub.*` | Start menu: Inventory, Character, Quickbar tabs + shortcuts to the game's panels |
+| `hub.*` | Start menu frame, Inventory / Character / Quickbar tabs, page dispatch (`hub_pages.h`) |
+| `hub_spells.cpp` | Spells page: class / level lists, cast, quickbar assign, prepare / clear slots |
+| `hub_journal.cpp` | Journal page (asks the server for the quest list while open) |
+| `hub_map.cpp` | Map page: tile icons, explored flags, hero / party / map notes |
+| `hub_system.cpp` | System page: save / load lists, rest, option screens, exit |
+| `describe.*`, `item_details.*` | silent examine (item description text) and the shared details pane |
+| `twoda.*` | 2DA reader (spells.2da, classes.2da) through the resource manager |
 | `inv.*` | inventory / character data and actions (equip, unequip, examine, drop, take, item icons incl. PLT armour) |
 | `loot.*` | container window (chests, corpses) |
 | `store.*` | merchant window |
@@ -63,19 +69,28 @@ All addresses and structures are in `docs/RE_NOTES.md`.
 Wine 9 + Xvfb + llvmpipe, game launched with `+TestNewModule "Prelude"` /
 `"Contest Of Champions 0492"`. The `[Developer] InjectFile` setting makes the pad read
 `buttons lx ly rx ry lt rt` from a text file every frame; `<InjectFile>.cmd` accepts
-`target <name>` (lock the soft target) and `probe` (log screen projection). Console cheats
+`target <name>` (lock the soft target), `use <name>` (default action on an object),
+`ev <hex>` (fire a game input event), `journal` (log quest counts) and `probe` (log screen
+projection). `tools/wine-test/regress.sh` runs the end-to-end checks. Console cheats
 (`DebugMode 1`, `dm_spawncreature`, ...) were typed with xdotool. Verified: movement, camera,
 targeting, interact, hold-A radial and wheel selection, quickslots, spell targeting confirm,
 conversation, hub tabs, equip / unequip, item radial, examine, quickbar assign radial,
+spells page (bard: cast, quickbar assign; wizard: cast, prepare, clear), journal (Chapter 1
+quest), map (Prelude / Chapter 1 areas), save to a new slot, save list with previews,
+item descriptions in inventory / loot / merchant,
 container loot / take / close, merchant buy / sell / tabs / pages / close, game panels with the
 cursor (main menu, options, character sheet, spell book, journal, map), rest.
 
 Not covered in Wine: real XInput hardware, rumble, multiplayer servers, DM client,
 hostile-creature melee (attack goes through the game's own default action / radial).
+Loading a save did nothing in the Wine test setup, also through the game's own Load panel;
+the Load list sends exactly the same request as that panel.
 
 ## Ideas for next steps
 
-* Custom spell book / journal / map screens (currently the game's panels with the cursor).
+* Metamagic preparation and domain slot changes on the Spells page (done in the game's
+  memorization panel today).
+* Typing a save name (an on-screen keyboard); new saves are named after the area and time.
 * Level-up and character creation screens on the pad UI.
 * Quick item wheel (potions / scrolls) on a long press.
 * Split / merge stacks and container bags inside the inventory screen.

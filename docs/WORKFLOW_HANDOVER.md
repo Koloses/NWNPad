@@ -145,6 +145,12 @@ rediscovering everything. Read it fully before starting.
 * When the pad disconnects, give everything back to the game (HUD panels, dialog panel,
   mouse cursor), otherwise a mouse user is stuck.
 * Keep the overlay off when a game panel needs the cursor, otherwise it covers the panel.
+* Some data only reaches the client while the game's own screen is "open" (the quest journal);
+  send the same open / closed messages from the replacement screen.
+* A screen that "works" with the cursor still counts as unfinished for this user: every menu
+  he can reach should be a native pad screen in the mod's style.
+* `+TestNewModule` picks the first local-vault character by first name; copy a .bic with a
+  renamed first name to test other classes (e.g. a wizard for spell preparation).
 
 ## 7. Suggested plan for NWN2Pad
 
