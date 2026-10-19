@@ -22,9 +22,9 @@ void Config_Load(const char* ini) {
     c.deadzoneL = getf("Controls", "DeadzoneLeft", 0.24f, ini);
     c.deadzoneR = getf("Controls", "DeadzoneRight", 0.20f, ini);
     c.walkThreshold = getf("Controls", "WalkThreshold", 0.55f, ini);
-    c.camYawSpeed = getf("Camera", "TurnSpeed", 2.6f, ini);
-    c.camPitchSpeed = getf("Camera", "TiltSpeed", 1.6f, ini);
-    c.camZoomSpeed = getf("Camera", "ZoomSpeed", 14.0f, ini);
+    c.camYawSpeed = getf("Camera", "TurnSpeed", 1.0f, ini);
+    c.camPitchSpeed = getf("Camera", "TiltSpeed", 0.8f, ini);
+    c.camZoomSpeed = getf("Camera", "ZoomSpeed", 0.8f, ini);
     c.invertCamX = geti("Camera", "InvertX", 0, ini);
     c.invertCamY = geti("Camera", "InvertY", 0, ini);
     c.targetRange = getf("Targeting", "Range", 12.0f, ini);

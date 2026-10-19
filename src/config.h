@@ -6,7 +6,7 @@ struct Config {
     int newMenus = 1;          // gamepad hub (inventory, character, journal...)
     float deadzoneL = 0.24f, deadzoneR = 0.20f;
     float walkThreshold = 0.55f;    // stick deflection below this walks
-    float camYawSpeed = 2.6f, camPitchSpeed = 1.6f, camZoomSpeed = 14.0f;
+    float camYawSpeed = 1.0f, camPitchSpeed = 0.8f, camZoomSpeed = 0.8f;   // 1.0 = keyboard speed
     int invertCamX = 0, invertCamY = 0;
     float targetRange = 12.0f, interactRange = 5.0f;
     int rumble = 1;

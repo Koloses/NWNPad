@@ -69,6 +69,7 @@ static bool g_moving = false, g_movingRun = false;
 static double g_lastDriveSend = 0;
 static float g_aimX = 1, g_aimY = 0;
 static bool g_aHeldForRadial = false;
+static bool g_aArmed = false;      // A went down in plain gameplay (not in a menu / dialogue / radial / targeting)
 static double g_lockTime = 0;
 
 void Control_Init() {
@@ -403,7 +404,7 @@ void Control_PreInput(void* in) {
     g_ctl.inActionTargetMode = capType == TYPE_ACTIONTARGET;
 
     g_padGameplay = false;
-    if (Control_UIWantsInput()) { g_moving = false; return; }
+    if (Control_UIWantsInput()) { g_moving = false; g_aArmed = false; return; }
     if (!player) { g_moving = false; return; }
     g_padGameplay = g_pad.now - g_ctl.lastPadUse < 30.0;
 
@@ -411,6 +412,16 @@ void Control_PreInput(void* in) {
     float fx, fy; CamForward(player, fx, fy);
     float rxv = fy, ryv = -fx;              // camera right vector
     g_moveMag = Len2(g_pad.lx, g_pad.ly);
+    // after a radial menu or targeting the left stick is still pushed from choosing the entry:
+    // ignore it until it returns to the centre, otherwise walking cancels the chosen action
+    {
+        static bool wasMenu = false, lock = false;
+        bool menu = g_ctl.radialOpen || g_ctl.inActionTargetMode;
+        if (menu) lock = true;
+        else if (wasMenu || lock) lock = g_moveMag > 0.15f;
+        wasMenu = menu;
+        if (lock && !menu) g_moveMag = 0.0f;
+    }
     if (g_moveMag > 0.0f && !g_ctl.radialOpen) {
         float wx = fx * g_pad.ly + rxv * g_pad.lx;
         float wy = fy * g_pad.ly + ryv * g_pad.lx;
@@ -426,19 +437,22 @@ void Control_PreInput(void* in) {
     }
 
     // --- radial menu open: sticks pick the entry
-    if (g_ctl.radialOpen) { RadialControl(cap); return; }
+    if (g_ctl.radialOpen) { g_aArmed = false; RadialControl(cap); return; }
 
     // --- camera (right stick)
     if (!g_ctl.radialOpen) {
         float rx = g_cfg.invertCamX ? -g_pad.rx : g_pad.rx;
         float ry = g_cfg.invertCamY ? -g_pad.ry : g_pad.ry;
-        float dt = (float)g_pad.dt;
+        // the game adds 75 (turn/tilt) and 7.5 (zoom) per frame while a camera key is held;
+        // full stick = key speed x setting, with a curve for fine control near the centre
+        float k = (float)g_pad.dt * 60.0f;
+        auto curve = [](float v) { return v * (0.35f + 0.65f * fabsf(v)); };
         if (g_pad.Down(PB_LB)) {
-            F<float>(in, OFS::In_CamPitch) += ry * g_cfg.camPitchSpeed * 60.0f * dt;
+            F<float>(in, OFS::In_CamPitch) += curve(ry) * 75.0f * g_cfg.camPitchSpeed * k;
         } else {
-            F<float>(in, OFS::In_CamZoom) += -ry * g_cfg.camZoomSpeed * dt;
+            F<float>(in, OFS::In_CamZoom) += -curve(ry) * 7.5f * g_cfg.camZoomSpeed * k;
         }
-        F<float>(in, OFS::In_CamYaw) += -rx * g_cfg.camYawSpeed * 60.0f * dt;
+        F<float>(in, OFS::In_CamYaw) += -curve(rx) * 75.0f * g_cfg.camYawSpeed * k;
     }
 
     // --- rumble when the hero gets hurt
@@ -477,9 +491,11 @@ void Control_PreInput(void* in) {
     ApplyHilite();
 
     // --- action target mode (spell / item / feat waiting for a target)
-    if (g_ctl.inActionTargetMode) { ActionTargetControl(player, cap); return; }
+    if (g_ctl.inActionTargetMode) { g_aArmed = false; ActionTargetControl(player, cap); return; }
 
     // --- interact / attack / context radial
+    if (g_pad.Pressed(PB_A)) g_aArmed = true;
+    if (!g_aArmed) g_aHeldForRadial = g_pad.Down(PB_A);      // a press that began elsewhere does nothing here
     if (g_pad.Down(PB_A) && !g_pad.Down(PB_LT) && !g_pad.Down(PB_RT)) {
         if (g_pad.Held(PB_A) > 0.45 && !g_aHeldForRadial) {
             g_aHeldForRadial = true;
@@ -488,11 +504,11 @@ void Control_PreInput(void* in) {
             else { SetMouse(GuiW() / 2, GuiH() / 2); HandleInputEvent(0x3e, 1); HandleInputEvent(0x3e, 0); }
         }
     }
-    if (g_pad.Released(PB_A) && !g_aHeldForRadial && !g_pad.Down(PB_LT) && !g_pad.Down(PB_RT)) {
+    if (g_pad.Released(PB_A) && g_aArmed && !g_aHeldForRadial && !g_pad.Down(PB_LT) && !g_pad.Down(PB_RT)) {
         void* t = g_ctl.softTarget ? GetObj(g_ctl.softTarget) : nullptr;
         if (t) { Log("default action on %08x type %d", Id(t), Type(t)); DefaultAction(t); }
     }
-    if (g_pad.Released(PB_A)) g_aHeldForRadial = false;
+    if (g_pad.Released(PB_A)) { g_aHeldForRadial = false; g_aArmed = false; }
 
     QuickSlots();
 
