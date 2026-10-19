@@ -135,6 +135,9 @@ rediscovering everything. Read it fully before starting.
 * GUI buttons in the front end ignored clicks sent through the in-game input path; send
   clicks to the GUI manager directly. Do not move the mouse between press and release
   (buttons re-hit-test on move and cancel the click).
+* NWN:EE mixes two UI systems: the classic GUI manager and Nuklear screens (module browser).
+  Nuklear reads the OS mouse, so the pad cursor must click with real input (SetCursorPos +
+  SendInput). Check every front-end screen with a real click path, not just one.
 * Radial menus count as modal panels; action-target mode can coexist with a modal panel.
   Order the "needs cursor" checks carefully.
 * `std::string` returned from game helpers: free game `CExoString`s with the game's own
