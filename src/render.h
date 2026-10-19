@@ -39,6 +39,8 @@ uint32_t CreateTexture(int w, int h, const void* rgba);     // returns GL name
 uint32_t CreateTextureCompressed(int w, int h, int fmt, const void* data, int size, int mips, const int* mipSizes);
 void DeleteTexture(uint32_t t);
 void Image(uint32_t tex, float x, float y, float w, float h, Col tint = Col(), float u0 = 0, float v0 = 0, float u1 = 1, float v1 = 1);
+// image rotated by quarter turns (texture corners shifted clockwise)
+void ImageRot(uint32_t tex, float x, float y, float w, float h, int quarter, Col tint = Col());
 void ImageRounded(uint32_t tex, float x, float y, float w, float h, float radius, Col tint = Col(), float u0 = 0, float v0 = 0, float u1 = 1, float v1 = 1);
 // clipping
 void PushClip(float x, float y, float w, float h);

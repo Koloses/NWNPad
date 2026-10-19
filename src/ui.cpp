@@ -7,6 +7,7 @@
 #include "dialog.h"
 #include "hud.h"
 #include "hub.h"
+#include "hub_pages.h"
 #include "describe.h"
 #include "quickbar.h"
 #include "loot.h"
@@ -45,6 +46,7 @@ bool Control_UIWantsInput() {
     void* pl = G::Player();
     HUD_UpdatePanels(pl != nullptr && UI_PadPresent());
     if (!g_pad.connected) { Cursor_SetMouseVisible(true); return false; }
+    HubSystem_Update();
     if (Dialog_Input()) { Cursor_Update(false); return true; }
     bool needCursor = Cursor_GameNeedsCursor(Dialog_Active());
     Cursor_Update(needCursor);

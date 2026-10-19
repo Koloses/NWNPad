@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <string>
 #include <cstring>
+#include <cstdio>
 #include <GL/gl.h>
 #include <GL/glext.h>
 #define STB_IMAGE_IMPLEMENTATION
@@ -141,6 +142,25 @@ uint32_t Res_Texture(const char* resref, int* outW, int* outH) {
     if (!e.tex && Res_Load(key.c_str(), 3, v)) e.tex = DecodeTGA(v, e.w, e.h);   // TGA
     g_texCache[key] = e;
     if (!e.tex) Log("texture '%s' not found", key.c_str());
+    if (outW) *outW = e.w;
+    if (outH) *outH = e.h;
+    return e.tex;
+}
+
+uint32_t Res_TextureFile(const char* path, int* outW, int* outH) {
+    if (!path || !path[0]) return 0;
+    std::string key = std::string("file:") + path;
+    auto it = g_texCache.find(key);
+    if (it != g_texCache.end()) { if (outW) *outW = it->second.w; if (outH) *outH = it->second.h; return it->second.tex; }
+    TexEntry e{0, 0, 0};
+    FILE* f = fopen(path, "rb");
+    if (f) {
+        std::vector<uint8_t> v;
+        fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
+        if (n > 0 && n < (32 << 20)) { v.resize(n); if (fread(v.data(), 1, n, f) == (size_t)n) e.tex = DecodeTGA(v, e.w, e.h); }
+        fclose(f);
+    }
+    g_texCache[key] = e;
     if (outW) *outW = e.w;
     if (outH) *outH = e.h;
     return e.tex;

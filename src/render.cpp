@@ -318,6 +318,18 @@ void Image(uint32_t tex, float x, float y, float w, float h, Col tint, float u0,
     d.x = x; d.y = y + h; d.u = u0; d.v = v1;
     PushQuad(tex, a, b, c, d);
 }
+void ImageRot(uint32_t tex, float x, float y, float w, float h, int quarter, Col tint) {
+    V v{}; v.mode = 0; v.col = tint.u32();
+    V q[4] = {v, v, v, v};
+    const float P[4][2] = {{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}};
+    const float UV[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    quarter = ((quarter % 4) + 4) % 4;
+    for (int i = 0; i < 4; i++) {
+        q[i].x = P[i][0]; q[i].y = P[i][1];
+        q[i].u = UV[(i + quarter) % 4][0]; q[i].v = UV[(i + quarter) % 4][1];
+    }
+    PushQuad(tex, q[0], q[1], q[2], q[3]);
+}
 void ImageRounded(uint32_t tex, float x, float y, float w, float h, float r, Col tint, float u0, float v0, float u1, float v1) {
     g_uv[0] = u0; g_uv[1] = v0; g_uv[2] = u1; g_uv[3] = v1;
     ShapeQuad(x, y, w, h, r, 0, 5, tint, tint, 0, 0, 0, tex);

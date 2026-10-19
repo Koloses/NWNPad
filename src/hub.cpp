@@ -3,6 +3,7 @@
 #include "inv.h"
 #include "quickbar.h"
 #include "describe.h"
+#include "hub_pages.h"
 #include "uikit.h"
 #include "render.h"
 #include "game.h"
@@ -15,14 +16,16 @@
 #include <string>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 
 using namespace G;
 using namespace R;
 
 namespace {
-struct Tab { const char* name; int event; };   // event 0 = custom screen
+struct Tab { const char* name; int event; const HubPage* page; };   // event 0 = custom screen
 const Tab TABS[] = {
-    {"Inventory", 0}, {"Character", 0}, {"Quickbar", 0}, {"Spells", 0x43}, {"Journal", 0x41}, {"Map", 0x44}, {"System", 0x12},
+    {"Inventory", 0, nullptr}, {"Character", 0, nullptr}, {"Quickbar", 0, nullptr}, {"Spells", 0, &PAGE_SPELLS},
+    {"Journal", 0, &PAGE_JOURNAL}, {"Map", 0, &PAGE_MAP}, {"System", 0, &PAGE_SYSTEM},
 };
 const int NTABS = sizeof(TABS) / sizeof(TABS[0]);
 
@@ -86,6 +89,14 @@ const InvItem* Selected() {
 }
 
 void Toast(const std::string& s) { HS.toast = s; HS.toastTime = g_pad.now; }
+}  // namespace
+void Hub_Toast(const std::string& s) { Toast(s); }
+void Hub_FireEvent(int ev) { HandleInputEvent(ev, 1); HandleInputEvent(ev, 0); }
+void Hub_ShowTab(const char* name) {
+    extern void Hub_SwitchTo(const char*);
+    Hub_SwitchTo(name);
+}
+namespace {
 
 void FireEvent(int ev) { HandleInputEvent(ev, 1); HandleInputEvent(ev, 0); }
 
@@ -110,8 +121,13 @@ void OpenExternal(int t, int event) {
     FireEvent(event);
 }
 
+void ClosePage() {
+    if (HS.open && TABS[HS.tab].page && TABS[HS.tab].page->close) TABS[HS.tab].page->close();
+}
+
 void SwitchTab(int t) {
     t = (t + NTABS) % NTABS;
+    ClosePage();
     HS.tab = t;
     if (TABS[t].event) { OpenExternal(t, TABS[t].event); return; }
     HS.open = true;
@@ -120,6 +136,7 @@ void SwitchTab(int t) {
     SyncStatus();
     HS.lastGather = -10;
     HS.lastChar = -10;
+    if (TABS[t].page && TABS[t].page->open) TABS[t].page->open();
 }
 
 void CenterMouse() {
@@ -518,8 +535,12 @@ void Hub_Init() { Inv::Init(); }
 
 bool Hub_Open() { return HS.open; }
 bool Hub_ExternalActive() { return HS.extTab >= 0; }
+void Hub_SwitchTo(const char* name) {
+    for (int i = 0; i < NTABS; i++) if (strcmp(TABS[i].name, name) == 0) { SwitchTab(i); return; }
+}
 
 void Hub_Close() {
+    ClosePage();
     if (HS.open) Log("hub: close");
     HS.open = false;
     SyncStatus();
@@ -582,6 +603,7 @@ bool Hub_Input() {
     if (HS.tab == 0) InventoryInput();
     else if (HS.tab == 1) CharacterInput();
     else if (HS.tab == 2) QuickbarInput();
+    else if (TABS[HS.tab].page) TABS[HS.tab].page->input();
     return true;
 }
 
@@ -600,6 +622,7 @@ void Hub_Draw() {
     if (HS.tab == 0) DrawInventory(x, cy, w, ch, a);
     else if (HS.tab == 1) DrawCharacter(x, cy, w, ch, a);
     else if (HS.tab == 2) DrawQuickbar(x, cy, w, ch, a);
+    else if (TABS[HS.tab].page) TABS[HS.tab].page->draw(x, cy, w, ch, a);
     // toast
     if (g_pad.now - HS.toastTime < 2.0) {
         float ta = (float)fmin(1.0, (2.0 - (g_pad.now - HS.toastTime)) / 0.4) * a;
@@ -610,9 +633,11 @@ void Hub_Draw() {
         TextCentered(FONT_BODY, px(22), W() * 0.5f, ty + px(7), HS.toast.c_str(), Theme::Text.alpha(ta));
     }
     // hints
-    HintItem hints[6]; int n = 0;
+    HintItem hints[8]; int n = 0;
     hints[n++] = {GL_LB, "Tabs"};
-    if (HS.tab == 0) {
+    if (TABS[HS.tab].page) {
+        n += TABS[HS.tab].page->hints(hints + n);
+    } else if (HS.tab == 0) {
         hints[n++] = {GL_DPAD, "Move"};
         hints[n++] = {GL_A, "Select"};
         hints[n++] = {GL_X, "Actions"};
@@ -620,12 +645,14 @@ void Hub_Draw() {
     } else if (HS.tab == 1) {
         hints[n++] = {GL_A, "Character sheet"};
         hints[n++] = {GL_Y, "Rest"};
-    } else {
+    } else if (HS.tab == 2) {
         hints[n++] = {GL_DPAD, "Move"};
         hints[n++] = {GL_A, "Assign"};
         hints[n++] = {GL_X, "Use"};
         hints[n++] = {GL_Y, "Make active"};
     }
-    hints[n++] = {GL_B, HS.filterSlot >= 0 ? "Back" : "Close"};
+    bool hasB = false;
+    for (int i = 0; i < n; i++) if (hints[i].g == GL_B) hasB = true;
+    if (!hasB) hints[n++] = {GL_B, HS.filterSlot >= 0 ? "Back" : "Close"};
     UI_DrawHints(hints, n, a);
 }

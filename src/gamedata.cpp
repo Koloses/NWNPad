@@ -15,6 +15,8 @@ GetObjectName_t fGetObjectName = nullptr;
 ExoDtor_t fExoDtor = nullptr;
 typedef int (*GetLevel_t)(void* stats);
 GetLevel_t fGetLevel = nullptr;
+typedef int (*LocGet_t)(const void* loc, int lang, void* exoStr, uint8_t gender, bool);
+LocGet_t fLocGet = nullptr;
 }
 
 namespace GD {
@@ -22,6 +24,18 @@ void Init() {
     fGetObjectName = (GetObjectName_t)A(0x1406a9630);
     fExoDtor = (ExoDtor_t)GetProcAddress(GetModuleHandleA(nullptr), "??1CExoString@@QEAA@XZ");
     fGetLevel = (GetLevel_t)A(0x1407f4870);
+    fLocGet = (LocGet_t)GetProcAddress(GetModuleHandleA(nullptr), "?GetString@CExoLocString@@QEBAHHPEAVCExoString@@E_N@Z");
+}
+
+int Language() { void* in = Internal(); return in ? F<int>(in, 0x200) : 0; }
+
+std::string LocStr(const void* loc) {
+    if (!loc || !fLocGet) return std::string();
+    struct { char* p; uint32_t len, cap; } s = {nullptr, 0, 0};
+    fLocGet(loc, Language(), &s, 0, true);
+    std::string r = s.p ? G2UClean(s.p, (int)s.len) : std::string();
+    if (fExoDtor) fExoDtor(&s);
+    return r;
 }
 
 std::string ObjName(uint32_t id) {

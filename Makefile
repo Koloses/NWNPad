@@ -4,7 +4,7 @@ MH=third_party/minhook
 CFLAGS=-O2 -I$(MH)/include -Ithird_party -Isrc
 CXXFLAGS=$(CFLAGS) -std=c++17 -fno-exceptions -fno-rtti -Wall -Wno-unused-function -Wno-unused-variable
 LDFLAGS=-shared -static -static-libgcc -static-libstdc++ -s -Wl,-Map,build/version.map -Wl,--enable-stdcall-fixup
-LIBS=-lopengl32 -lgdi32 -luser32 -lkernel32
+LIBS=-lopengl32 -lgdi32 -luser32 -lshell32 -lkernel32
 SRC=$(wildcard src/*.cpp)
 CSRC=src/fonts_data.c
 MHSRC=$(MH)/src/buffer.c $(MH)/src/hook.c $(MH)/src/trampoline.c $(MH)/src/hde/hde64.c
