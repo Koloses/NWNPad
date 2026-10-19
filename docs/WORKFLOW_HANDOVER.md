@@ -21,9 +21,11 @@ rediscovering everything. Read it fully before starting.
   release zip, sources zip, `README.md`, `HANDOVER.md`, `docs/RE_NOTES.md`, default ini.
   Copy them to his machine (device bridge): mod files into the game exe folder, zips + README
   into `<game>\<ModName>\`.
-* Visual style he chose for the series: modernised dark UI, gold accents, coloured A/B/X/Y
-  glyphs, hero portrait with bars (no health orb), hub with LB/RB tabs. The new HUD must sit
-  behind an ini switch and fall back to the game's own HUD when off (and when no pad is used).
+* Visual style: no fixed palette. The redesigned UI has to fit each game's own art and mood
+  (NWNPad's dark panels with gold accents were chosen to match NWN:EE, not a series rule).
+  Study the game's UI art, fonts and colours first and derive the theme from them; keep it
+  modern and clean. The new HUD must sit behind an ini switch and fall back to the game's own
+  HUD when off (and when no pad is used).
 
 ## 2. Environment (cloud container, Linux)
 
@@ -105,7 +107,7 @@ rediscovering everything. Read it fully before starting.
   UTF-8; Polish = cp1250).
 * Input routing each frame: dialogue -> game panels needing the cursor -> store -> loot ->
   hub -> gameplay; radial / targeting always to gameplay.
-* Fonts: Cinzel SemiBold (titles) + Lora (body), subset with Latin Extended, embedded.
+* Fonts: pick open-licence fonts that suit the game (NWNPad: Cinzel + Lora), subset with Latin Extended (Polish), embedded.
 
 ## 5. Testing workflow (essential: he will not test)
 
