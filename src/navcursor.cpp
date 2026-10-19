@@ -44,14 +44,29 @@ void* HitAt(float x, float y) {
 }
 void ClearHitCache() { void* g = GM(); if (g) F<void*>(g, 0x78) = nullptr; }
 
+// mouse moves that do not come from the pad cursor (the OS echo of our own cursor warp, which can
+// land a few pixels off with window scaling) are ignored while the pad drives the cursor;
+// otherwise they cancel button presses and pull the cursor away
+bool g_ownMove = false;
+double g_padCursorTime = -10;
+typedef void (*MouseMove_t)(void*, int, int);
+MouseMove_t o_HandleMouseMove = nullptr;
+void hk_HandleMouseMove(void* gm, int x, int y) {
+    if (!g_ownMove && g_active && (g_aDown || g_xDown || g_pad.now - g_padCursorTime < 0.6)) return;
+    o_HandleMouseMove(gm, x, y);
+}
+
 void MoveMouse(float x, float y) {
     void* g = GM();
     if (!g || !fSetMousePos) return;
+    g_padCursorTime = g_pad.now;
     int w = GW(), h = GH();
     x = x < 0 ? 0 : (x > w - 1 ? (float)(w - 1) : x);
     y = y < 0 ? 0 : (y > h - 1 ? (float)(h - 1) : y);
     g_cx = x; g_cy = y;
+    g_ownMove = true;
     fSetMousePos(g, (int)x, (int)y);
+    g_ownMove = false;
 }
 
 // find the extent of object `obj` around (x,y) along one axis
@@ -102,6 +117,7 @@ typedef int (*RDown_t)(void*);
 LDown_t fLDown = nullptr; Up_t fLUp = nullptr; RDown_t fRDown = nullptr; Up_t fRUp = nullptr;
 // clicks go straight to the GUI manager (the in-game input path ignores them on the front-end screens)
 void Click(int button, bool down) {
+    g_padCursorTime = g_pad.now;
     void* g = GM();
     if (!g || !fLDown || !fLUp || !fRDown || !fRUp) { HandleInputEvent(button, down ? 1 : 0); return; }
     if (button == 0) { if (down) fLDown(g, 0); else fLUp(g); }
@@ -124,6 +140,11 @@ void Cursor_Init() {
 }
 
 bool Cursor_Active() { return g_active; }
+
+void Cursor_InstallHooks() {
+    void* p = (void*)GetProcAddress(GetModuleHandleA(nullptr), "?HandleMouseMove@CGuiMan@@QEAAXHH@Z");
+    if (p) o_HandleMouseMove = (MouseMove_t)Hook_Create((uintptr_t)p - G::base + 0x140000000ULL, (void*)hk_HandleMouseMove, "CGuiMan::HandleMouseMove");
+}
 
 void Cursor_SetMouseVisible(bool vis) {
     void* g = GM();

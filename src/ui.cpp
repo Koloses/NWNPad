@@ -111,4 +111,5 @@ void UI_InstallHooks() {
     Dialog_InstallHooks();
     HUD_InstallHooks();
     QB_InstallHooks();
+    Cursor_InstallHooks();
 }
