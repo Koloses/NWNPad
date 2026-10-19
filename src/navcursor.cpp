@@ -184,7 +184,7 @@ void Cursor_Update(bool active) {
     float dt = (float)g_pad.dt;
     float lx = g_pad.lx, ly = g_pad.ly;
     float m = sqrtf(lx * lx + ly * ly);
-    if (m > 0.01f) {
+    if (m > 0.01f && !g_aDown && !g_xDown) {
         float speed = GH() * 1.25f * (0.25f + 0.75f * m * m);
         void* over = HitAt(g_cx, g_cy);
         ClearHitCache();
@@ -196,9 +196,12 @@ void Cursor_Update(bool active) {
     if (g_pad.Repeat(PB_DLEFT, 0.5, 0.16)) Snap(-1, 0);
     if (g_pad.Repeat(PB_DRIGHT, 0.5, 0.16)) Snap(1, 0);
     // buttons
-    if (g_pad.Pressed(PB_A)) { MoveMouse(g_cx, g_cy); Click(0, true); g_aDown = true; }
-    if (g_pad.Released(PB_A) && g_aDown) { MoveMouse(g_cx, g_cy); Click(0, false); g_aDown = false; }
-    if (g_pad.Pressed(PB_X)) { MoveMouse(g_cx, g_cy); Click(1, true); g_xDown = true; }
+    // no mouse moves between press and release: a move while a button holds the mouse
+    // re-tests the hit with other flags and can cancel the click (main menu buttons)
+    auto Sync = [&]() { if (F<int>(g, 0xd4) != (int)g_cx || F<int>(g, 0xd8) != (int)g_cy) MoveMouse(g_cx, g_cy); };
+    if (g_pad.Pressed(PB_A)) { Sync(); Click(0, true); g_aDown = true; }
+    if (g_pad.Released(PB_A) && g_aDown) { Click(0, false); g_aDown = false; }
+    if (g_pad.Pressed(PB_X)) { Sync(); Click(1, true); g_xDown = true; }
     if (g_pad.Released(PB_X) && g_xDown) { Click(1, false); g_xDown = false; }
     if (g_pad.Pressed(PB_B)) { HandleInputEvent(0x12, 1); HandleInputEvent(0x12, 0); }
     // right stick scrolls
