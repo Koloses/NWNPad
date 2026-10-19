@@ -52,7 +52,6 @@ double g_padCursorTime = -10;
 typedef void (*MouseMove_t)(void*, int, int);
 MouseMove_t o_HandleMouseMove = nullptr;
 void hk_HandleMouseMove(void* gm, int x, int y) {
-    if (!g_ownMove && g_active && (g_aDown || g_xDown || g_pad.now - g_padCursorTime < 0.6)) return;
     o_HandleMouseMove(gm, x, y);
 }
 
@@ -108,6 +107,7 @@ void Snap(int dirX, int dirY) {
         }
     }
     if (bobj) CenterOn(bobj, bx, by);
+    else if (!cur) MoveMouse(g_cx + dirX * GH() * 0.05f, g_cy + dirY * GH() * 0.05f);   // screens without GUI-manager controls (Nuklear): step
     ClearHitCache();
 }
 
@@ -115,9 +115,42 @@ typedef int (*LDown_t)(void*, int);
 typedef void (*Up_t)(void*);
 typedef int (*RDown_t)(void*);
 LDown_t fLDown = nullptr; Up_t fLUp = nullptr; RDown_t fRDown = nullptr; Up_t fRUp = nullptr;
-// clicks go straight to the GUI manager (the in-game input path ignores them on the front-end screens)
+// clicks are injected as real mouse input (SendInput) so they reach every UI layer: the classic
+// GUI manager and the newer Nuklear screens (module browser, ...) that read the OS mouse
+HWND GameWindow() {
+    static HWND w = nullptr;
+    if (w && IsWindow(w)) return w;
+    struct Ctx { HWND best; LONG area; } c = {nullptr, 0};
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND h, LPARAM lp) -> BOOL {
+        Ctx* c = (Ctx*)lp; RECT r;
+        if (IsWindowVisible(h) && GetClientRect(h, &r)) { LONG a = r.right * r.bottom; if (a > c->area) { c->area = a; c->best = h; } }
+        return TRUE;
+    }, (LPARAM)&c);
+    w = c.best;
+    return w;
+}
+bool PlaceOsCursor() {
+    HWND w = GameWindow();
+    RECT r;
+    if (!w || !GetClientRect(w, &r) || r.right <= 0 || r.bottom <= 0) return false;
+    POINT p = {(LONG)(g_cx * r.right / (float)GW()), (LONG)((GH() - g_cy) * r.bottom / (float)GH())};
+    if (p.x >= r.right) p.x = r.right - 1;
+    if (p.y >= r.bottom) p.y = r.bottom - 1;
+    if (p.y < 0) p.y = 0;
+    ClientToScreen(w, &p);
+    g_ownMove = true;
+    SetCursorPos(p.x, p.y);
+    g_ownMove = false;
+    return true;
+}
 void Click(int button, bool down) {
     g_padCursorTime = g_pad.now;
+    if (PlaceOsCursor()) {
+        INPUT in = {};
+        in.type = INPUT_MOUSE;
+        in.mi.dwFlags = button == 0 ? (down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP) : (down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP);
+        if (SendInput(1, &in, sizeof in) == 1) return;
+    }
     void* g = GM();
     if (!g || !fLDown || !fLUp || !fRDown || !fRUp) { HandleInputEvent(button, down ? 1 : 0); return; }
     if (button == 0) { if (down) fLDown(g, 0); else fLUp(g); }
@@ -248,5 +281,5 @@ void Cursor_Draw() {
     hints[n++] = {GL_B, "Back"};
     hints[n++] = {GL_RS, "Scroll"};
     hints[n++] = {GL_DPAD, "Jump"};
-    UI_DrawHints(hints, n, 0.9f);
+    UI_DrawHints(hints, n, sy > R::H() * 0.85f ? 0.2f : 0.9f);   // fade when the cursor works near the bottom
 }
