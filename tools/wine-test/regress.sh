@@ -27,6 +27,20 @@ p0=$(grep "probe player" $LOG | tail -1)
 echo probe > /tmp/pad.txt.cmd; sleep 1
 p1=$(grep "probe player" $LOG | tail -1)
 [ "${p0#*player}" != "${p1#*player}" ] && ok "left stick moves the hero" || bad "left stick moves the hero"
+# hub pages: spells, journal, map, system (save list)
+chk 10 "hub: open" 0.2 "Start opens the hub (pages)"
+sleep 0.6
+./tap.sh 200 0.3; sleep 1.5      # quickbar -> spells
+./shot.sh /tmp/r_spells.png
+grep -q "2da: spells" $LOG && ok "Spells page reads spells.2da" || bad "Spells page reads spells.2da"
+chk 200 "journal: screen open" 0.3 "Journal page asks the server for quests"
+chk 200 "map: area" 0.3 "Map page reads the area"
+sleep 1; ./shot.sh /tmp/r_map.png
+./tap.sh 200 0.3; sleep 0.9
+./tap.sh 2 0.2; sleep 0.5; ./tap.sh 2 0.2; sleep 0.5; ./tap.sh 2 0.2; sleep 0.5
+chk 1000 "system: [0-9]* saves" 0.3 "System page lists saves"
+sleep 1; ./shot.sh /tmp/r_load.png
+./tap.sh 2000 0.3; sleep 0.5; ./tap.sh 2000 0.3; sleep 1
 # pad unplugged -> game HUD back after 5 s
 echo "" > /tmp/pad.txt; sleep 7; ./shot.sh /tmp/r_nopad.png
 echo "0 0 0 0 0 0 0" > /tmp/pad.txt

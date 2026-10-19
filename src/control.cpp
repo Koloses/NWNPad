@@ -9,6 +9,7 @@
 #include "gamedata.h"
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <string>
 #include <windows.h>
 #include <cmath>
@@ -368,6 +369,30 @@ static void DevCommands(void* player) {
         if (void* t = g_ctl.softTarget ? GetObj(g_ctl.softTarget) : nullptr) {
             Vec3 q = Pos(t); WorldToScreen(q, sx, sy);
             Log("dev: probe target (%.1f %.1f %.1f) -> sx %.3f sy %.3f", q.x, q.y, q.z, sx, sy);
+        }
+        return;
+    }
+    if (strncmp(line, "ev ", 3) == 0) {       // fire a game input event (hex)
+        int ev = (int)strtol(line + 3, nullptr, 16);
+        Log("dev: event %#x", ev);
+        HandleInputEvent(ev, 1); HandleInputEvent(ev, 0);
+        return;
+    }
+    if (strncmp(line, "journal", 7) == 0) {
+        void* in = Internal(); void* j = in ? F<void*>(in, 0x70) : nullptr;
+        Log("dev: journal %p done %d active %d", j, j ? F<int>(j, 8) : -1, j ? F<int>(j, 0x30) : -1);
+        return;
+    }
+    if (strncmp(line, "use ", 4) == 0) {      // default action on the first object matching the name
+        std::string want = line + 4;
+        for (auto& c : want) c = (char)tolower((unsigned char)c);
+        void* area = F<void*>(player, OFS::Obj_Area);
+        int n = area ? F<int>(area, OFS::Area_ObjCount) : 0;
+        uint32_t* ids = area ? F<uint32_t*>(area, OFS::Area_ObjIds) : nullptr;
+        for (int i = 0; ids && i < n; i++) {
+            std::string l = GD::ObjName(ids[i]); for (auto& c : l) c = (char)tolower((unsigned char)c);
+            void* o = GetObj(ids[i]);
+            if (o && l.find(want) != std::string::npos) { Log("dev: use %08x", ids[i]); DefaultAction(o); return; }
         }
         return;
     }
