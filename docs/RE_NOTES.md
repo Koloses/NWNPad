@@ -1,0 +1,121 @@
+# NWN:EE (build 8193.37, d950219, Jan 2025) – reverse-engineering notes
+Win64 nwmain.exe image base 0x140000000. Linux nwmain-linux (not stripped) used as symbol reference.
+Linux addresses below are ELF vaddr (Ghidra = +0x100000).
+
+## Globals
+- g_pAppManager (exported ?g_pAppManager@@3PEAVCAppManager@@EA). *g_pAppManager = CClientExoApp*; CClientExoApp+8 = CClientExoAppInternal*.
+
+## CClientExoAppInternal (offsets identical Linux/Win)
+- +0x30 CNWCModule*, +0x90 CGuiInGame*, +0x108 active CActionTarget*, +0x118 input ctx, +0x120/+0x124 mouse x/y
+- +0x140 byte "mode" (1 = dragging/mouse-drive), +0x154 box select, +0x208 CNWCMessage*
+- drive mode: +0x198 timer, +0x1a0 timer, +0x1a8, +0x1b0 dirty(force send), +0x1b4 fwd, +0x1b8 fwd2, +0x1bc back,
+  +0x1c0 turnL, +0x1c4 turnR, +0x1c8 strafeL, +0x1cc strafeR
+- DriveControl flags: bit0 fwd, bit1 back, 3 = run fwd, 4/8 strafe, 0x10/0x20 turn
+
+| function | Linux | Win |
+|---|---|---|
+| ProcessInput | 0x665140 | 0x1406eeb50 |
+| HandleInputEvent(id,pressed,prev,gui) | 0x663140 | 0x1406eada0 |
+| UpdateDriveMode | 0x65db50 | 0x1406ef4b0 |
+| GetPlayerCreature | 0x63dcd0 | 0x1406d6140 |
+| GetModule | 0x638c50 | 0x1406d5970 |
+| GetGameObject(id) | 0x63d680 | 0x1406d5860 |
+| PerformLButtonDownAction | 0x6625c0 | 0x1406ed940 |
+| PerformDefaultActionOnObject(obj) | 0x65ec00 | 0x1406ed540 |
+| FeedbackHitCheckHostile(obj**,pos*,int*,int) | 0x65ede0 | 0x1406e84a0 |
+| FeedbackHitCheckNonHostile | 0x65fcc0 | 0x1406e9370 |
+| CClientExoApp::GetPlayerCreature | | 0x1406a9810 |
+
+## CNWCCreature (Win offsets differ from Linux, typically -0x20 after base CNWCObject)
+- +0x38 pos(x,y,z), +0x44 orientation vec, +0xc type, +0x8 object id (CNWCObject base same)
+- drive precondition: Linux 0x39c&2 / Win 0x37c&2 ; Linux 0x43c / Win 0x41c
+
+## Input event ids (HandleInputEvent)
+0x57 strafeL, 0x58 strafeR, 0x59 forward, 0x5a fwd2, 0x5b back, 0x5c turnL, 0x5d turnR, 0x12 escape/cancel
+Radial key ids: 0x2f..0x37 octants (see CRadialMenu::HandleKeyEvent), 0x33 centre, 0x12 cancel.
+
+## vtable rule
+GCC vtables have 2 dtor slots; MSVC 1 -> Win vfunc offset = Linux offset - 8 for slots after dtor.
+
+## Function map (Win VA, all verified by decompiling both builds)
+| function | Win |
+|---|---|
+| CClientExoAppInternal::ProcessInput (hooked: pad input before the game) | 0x1406eeb50 |
+| CClientExoAppInternal::HandleInputEvent(this,id,value,prev,gui) | 0x1406eada0 |
+| CClientExoAppInternal::UpdateDriveMode (hooked: analog movement) | 0x1406ef4b0 |
+| CClientExoAppInternal::UpdateMouseCursorAppearance (hooked: hover = soft target) | 0x1406efea0 |
+| CClientExoAppInternal::FeedbackHitCheckHostile / NonHostile (hooked: world pick) | 0x1406e84a0 / 0x1406e9370 |
+| CClientExoAppInternal::PerformDefaultActionOnObject | 0x1406ed540 |
+| CClientExoAppInternal::PerformL/RButtonDownAction | 0x1406ed940 / 0x1406ee750 |
+| CGuiMan::GuiObjectHitCheck (hooked) / HandleKeyEvent / SetMousePosition | 0x1401f31f0 / 0x1401f3630 / 0x1401f4c30 |
+| Camera::GetYaw / MapToScreen(this, Vec3* out, Vec3* in, bool normalized) | 0x140059020 / 0x140059a90 |
+| CGuiQuickButton::HandleLeftButton / HandleRightButton / HandleTriggerTooltip | 0x14085b350 / 0x14085d270 / 0x14085d410 |
+| CGuiInGame::ShowDialogEntry / ShowDialogReplies / HandleDialogSelection | 0x1406f8bd0 / 0x1406f8f50 / 0x1406f5850 |
+| CGuiInGame::AppendToMsgBuffer (hooked: HUD feed) | 0x1406f3f40 |
+| CGuiActionTarget::HandleLMouseDown | 0x14083a860 |
+| CClientExoApp::GetObjectName(app,id,CExoString*) | 0x1406a9630 |
+| CClientExoApp::GetNWCMessage / GetInventoryPanel / GetWorldStore | 0x1406a9600 / 0x1406a9250 / 0x1406a9990 |
+| CClientExoApp::GetPauseState(app, 2) | 0x1406a96a0 |
+| CNWCCreature::PerformEquipItem(cre,item,slotMask) / UnEquip(cre,item) | 0x140803bd0 / 0x140804190 |
+| CNWCCreature::PerformDropItem(cre,item) / PerformExamine(cre,id,0,0) | 0x1408039d0 / 0x140803d90 |
+| CNWCItem::ActivateRadialMenu(item,int) / GetName(item,CExoString*,int) | 0x14083b890 / 0x14083c300 |
+| CNWCMessage::SendPlayerToServerInventory_RepositoryMove(msg,item,x,y,repo) | 0x1407bfb30 |
+| CNWCMessage::SendPlayerToServerGuiInventory_Status(msg,open,cre) | 0x1407bcc10 |
+| CNWCMessage::SendPlayerToServerGuiCharacterSheet_Status(msg,page,cre) | 0x1407bc8d0 |
+| CNWCMessage::SendPlayerToServerStore_RequestBuy / RequestSell / Close | 0x1407c2710 / 0x1407c2800 / 0x1407c2550 |
+| CNWCMessage::SendPlayerToServerMessage(msg,major,minor,data,size) | 0x1407c10c0 |
+| CPanelInventory::HandleXButton (closes container view) | 0x140854e80 |
+| CNWCStore::GetIsRestrictedBuyItem(store,baseItem) | 0x1408402f0 |
+| CNWCCreatureStats: GetClassesAbilityAdjust / GetArmorClass / GetCombatModeACModifier / GetBaseAttackBonus | 0x1407efc10 / 0x1407ee4c0 / 0x1407f09d0 / 0x1407ef400 |
+| CNWCCreatureStats: GetClassesString / GetRaceString / GetExpNeededForLevelUp / GetLevel | 0x1407efd30 / 0x1407f52c0 / 0x1407f28a0 / 0x1407f4870 |
+Exported (by name): g_pAppManager, g_pGuiMan, g_pRules, g_pExoResMan, g_pTlkTable, CExoResMan::Get,
+CTlkTable::GetSimpleString, CGuiPanel::Hide/Deactivate, CGuiMan::HandleL/RMouseDown/Up, HandleMouseWheel,
+ShowTooltipText, ShowMouse/HideMouse, CNWBaseItemArray::GetBaseItem, CNWMessage::CreateWriteMessage/WriteBYTE/GetWriteMessage,
+Encoding::g_DefaultLocale.
+
+## Client object array
+CClientExoAppInternal+0x28 -> CGameObjectArray*: buckets at +0, modulus +0x1c, bucket count +0x24;
+node {u32 id; CGameObject* obj @+8; next @+0x10}. Item: CGameObject sub-object at CNWCItem+0x48 (vfunc AsNWCItem 0x68).
+
+## CNWCItem (Win)
++0x40 base item, +0x50 object id, +0x1c0 identified, +0x1c4 stolen, +0x238 CGuiIcon*, +0x254/+0x255 repository x/y,
++0x25c equipped by, +0x260 pending-move flag, +0x264 possessor (inventory owner), +0x268 1 = in an open container view,
++0x280 base cost, +0x284 stack size, +0x290 CExoString name.
+CNWBaseItem: +0 name strref, +4 EquipableSlots mask, +0x16 model type, +0x24 stacking.
+Equipment slot ids (mask 1<<i): 0 head 1 chest 2 boots 3 arms 4 right hand 5 left hand 6 cloak 7/8 rings 9 neck 10 belt
+11 arrows 12 bullets 13 bolts 14-17 creature slots. Equipped item ids at CNWCCreature+0x308+4*i. Gold at +0x1b8.
+The server streams inventory contents only while the client reports the inventory GUI as open
+(SendPlayerToServerGuiInventory_Status); repository updates are tagged with CPanelInventory+0x2f68 (char id).
+
+## Item icons
+CGuiIcon: resref +8 (16 chars), size +0x1c/+0x20/+0x24. CCompositeIcon (weapons): resrefs +8, +0x48, +0x59 (layers b/m/t).
+CLayeredIcon: resref +8, colour count +0x48, colours (u16 palette<<8|row) +0x50.
+CArmorIcon: 6 part resrefs at +0x48 step 0x11 (PLT), colour count +0xb0, colours +0xb8, per-part colours +0xc0 (6*count).
+PLT = "PLT V1" header, w/h at +16/+20, pixels (value, layer) bottom-up; colour = pal_<layer>.tga[row][value].
+Palettes: pal_skin01, pal_hair01, pal_armor01, pal_armor02, pal_cloth01, pal_leath01, pal_tattoo01.
+
+## Containers / stores
+CPanelInventory (Win): +0x2f64 container open, +0x268c container id, +0x2f68 character id. Container item take:
+RepositoryMove(item, 0xff, 0xff, INVALID). Page next/prev: message 0x19/2 and 0x19/3.
+CNWCStore (Win): +0x170 CPanelStore*, +0x178 open, +0x17c markdown, +0x17e markup (short), +0x180 stolen markdown,
++0x184 black market, +0x18c max buy price, +0x190 store gold (-1 unlimited).
+CPanelStore (Win): +0xf0 CGuiMultiPageMultiInvbox (cols +0x190, rows +0x194, ids +0x1a0), +0x2c0 page, +0xb18 page count,
++0xb1c tab, +0xd34 tab name strrefs. Buy price = cost*markup/100, sell = cost*markdown/100 (capped by max buy).
+Change tab: message 7/4 (byte tab); page: 7/5 (byte page). Closing: CGuiPanel::Deactivate(panel,0).
+
+## CNWCCreatureStats (offsets same on both builds)
++0x50 race, +0x69 class count, +0x76..0x7b base STR DEX CON INT WIS CHA, +0x7d..0x82 bonuses, +0x86 temp HP, +0x88 HP,
++0x8a max HP, +0x8c natural AC base, +0x94 experience, +0xb4 portrait resref, classes at +0x295 + i*0x150 (id, level, neg).
+Racial ability adjust: rules+0x118 races, stride 0x68, STR +0x18 DEX +0x19 INT +0x1a CHA +0x1b WIS +0x1c CON +0x1d.
+XP table: rules+0x28 + level*4.
+
+## Quick buttons
+CGuiInGame+0x60 CPanelQuickBar; buttons at +0xf0 + (set*12+slot)*0x2c8; button type +0x140, icon resref +0x11c,
+disabled flag +8 bit0. Names come from HandleTriggerTooltip with CGuiMan::ShowTooltipText hooked to capture the text.
+
+## GUI
+CGuiMan: +0x58 captured object (radial 'RMnu' 0x524d6e75, action target 'AcTg' 0x41635467), +0x78 hit cache,
++0x88/+0x90 modal panel stack, +0xb8/+0xbc GUI size, +0xd4/+0xd8 mouse (y up).
+Front-end clicks must go through CGuiMan::HandleLMouseDown/Up (the in-game input path ignores them).
+CGuiInGame (Win): +0x70 dialog panel, +0x78 char sheet, +0x60 quickbar, +0x58 party bar, +0x68 compass, +0xa8 action queue,
++0xb0 player state bar, +0x3a0 popup array, +0x3c4 popup count.
