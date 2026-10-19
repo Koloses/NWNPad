@@ -15,3 +15,5 @@ void Hub_FireEvent(int ev);
 void Hub_ShowTab(const char* name);
 // called every frame from the UI layer (pages that wait for game panels)
 void HubSystem_Update();
+// HUD minimap (top-left corner at x,y)
+void Map_DrawMinimap(float x, float y, float size, float alpha);

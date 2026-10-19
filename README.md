@@ -40,6 +40,9 @@ detects it and disables itself (see the log).
 | Start | Hub menu |
 | Back | Map (hub Map tab) |
 
+The HUD has a minimap in the top-right corner (north up): explored area, your position and
+facing, party (green), enemies (red), other people and map notes. Back opens the full map.
+
 The target is picked automatically from what is in front of the hero; enemies are preferred.
 
 **Action wheels:** point with either stick, A selects, Y goes back one level, B closes.

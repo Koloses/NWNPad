@@ -10,6 +10,7 @@
 #include "log.h"
 #include <cmath>
 #include <cstring>
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -213,3 +214,80 @@ int Hints(HintItem* o) {
 }  // namespace
 
 const HubPage PAGE_MAP = {Open, Input, Draw, Hints, nullptr};
+
+// HUD minimap: north-up square around the hero (explored tiles, notes, party, hostiles)
+void Map_DrawMinimap(float x, float y, float size, float a) {
+    void* ar = Area();
+    void* pl = Player();
+    if (!ar || !pl) return;
+    int tw = F<int>(ar, 0xc), th = F<int>(ar, 0x10);
+    char* tiles = F<char*>(ar, 0x298);
+    if (tw <= 0 || th <= 0 || tw > 64 || th > 64 || !tiles) return;
+    Shadow(x, y, size, size, px(14), px(16), Col(0, 0, 0, (int)(150 * a)));
+    RoundRect(x, y, size, size, px(14), Col(6, 5, 4, (int)(215 * a)));
+    const float VIEW = 44.0f;                         // metres across
+    float sc = size / VIEW;
+    Vec3 pp = Pos(pl);
+    float ox = x + size * 0.5f - pp.x * sc, oy = y + size * 0.5f + pp.y * sc;
+    PushClip(x + px(3), y + px(3), size - px(6), size - px(6));
+    float ts = TILE_M * sc;
+    int tx0 = std::max(0, (int)((pp.x - VIEW) / TILE_M)), tx1 = std::min(tw - 1, (int)((pp.x + VIEW) / TILE_M));
+    int ty0 = std::max(0, (int)((pp.y - VIEW) / TILE_M)), ty1 = std::min(th - 1, (int)((pp.y + VIEW) / TILE_M));
+    for (int ty = ty0; ty <= ty1; ty++)
+        for (int tx = tx0; tx <= tx1; tx++) {
+            char* t = tiles + (size_t)(ty * tw + tx) * 0x60;
+            if (!F<int>(t, 0x30)) continue;
+            float sx = ox + tx * ts, sy = oy - (ty + 1) * ts;
+            void* td = F<void*>(t, 0x40);
+            uint32_t tex = 0;
+            if (td && Readable((char*)td + 0x21, 16)) { char ref[17] = {}; memcpy(ref, (char*)td + 0x21, 16); tex = Res_Texture(ref); }
+            if (tex) ImageRot(tex, sx, sy, ts + 0.5f, ts + 0.5f, F<int>(t, 0x24) & 3, Col(236, 222, 196, (int)(235 * a)));
+            else R::Rect(sx, sy, ts, ts, Col(70, 62, 50, (int)(235 * a)));
+        }
+    for (const Pin& p : Pins(ar)) {
+        float px0 = ox + p.pos.x * sc, py0 = oy - p.pos.y * sc;
+        Circle(px0, py0, px(5), Col(30, 20, 10, (int)(230 * a)));
+        Circle(px0, py0, px(3.5f), Theme::Gold.alpha(a));
+    }
+    // creatures nearby: hostiles red, party green
+    int n = F<int>(ar, OFS::Area_ObjCount);
+    uint32_t* ids = F<uint32_t*>(ar, OFS::Area_ObjIds);
+    uint32_t pid = Id(pl);
+    for (int i = 0; ids && i < n && i < 5000; i++) {
+        void* o = GetObj(ids[i]);
+        if (!o || Type(o) != OT_CREATURE || Id(o) == pid || GD::IsDead(o)) continue;
+        Vec3 q = Pos(o);
+        if (fabsf(q.x - pp.x) > VIEW * 0.5f || fabsf(q.y - pp.y) > VIEW * 0.5f) continue;
+        bool party = GD::MasterId(o) == pid;
+        int r = GD::Reaction(o);
+        float cx = ox + q.x * sc, cy = oy - q.y * sc;
+        if (!party && r != 2) {          // other people: small neutral dot
+            Circle(cx, cy, px(3.5f), Col(10, 8, 6, (int)(200 * a)));
+            Circle(cx, cy, px(2.3f), Col(214, 200, 160, (int)(220 * a)));
+            continue;
+        }
+        Circle(cx, cy, px(5), Col(10, 8, 6, (int)(230 * a)));
+        Circle(cx, cy, px(3.5f), (party ? Theme::Friendly : Theme::Hostile).alpha(a));
+    }
+    // hero + camera view direction
+    float hx = x + size * 0.5f, hy = y + size * 0.5f;
+    Vec3 o = F<Vec3>(pl, OFS::Obj_Orient);
+    Arrow(hx, hy, px(12), atan2f(o.x, o.y), Col(20, 14, 6, (int)(255 * a)));
+    Arrow(hx, hy, px(9), atan2f(o.x, o.y), Theme::LineStrong.alpha(a));
+    PopClip();
+    RoundRectBorder(x, y, size, size, px(14), px(1.5f), Theme::Line.alpha(a));
+    // north marker on the frame
+    float nx = x + size * 0.5f;
+    Circle(nx, y, px(11), Col(20, 16, 12, (int)(240 * a)));
+    Ring(nx, y, px(11), px(1.2f), Theme::Line.alpha(a));
+    TextCentered(FONT_TITLE, px(14), nx, y - px(8), "N", Theme::Gold.alpha(a));
+    // area name under the map
+    std::string name = F<char*>(ar, 0x238) ? G2UClean(F<char*>(ar, 0x238), F<int>(ar, 0x240)) : std::string();
+    if (!name.empty()) {
+        float fs = px(17);
+        float w = TextWidth(FONT_BODY_BOLD, fs, name.c_str());
+        if (w > size) { TextFit(FONT_BODY_BOLD, fs, x, y + size + px(8), size, name.c_str(), Theme::TextDim.alpha(a)); }
+        else TextCentered(FONT_BODY_BOLD, fs, x + size * 0.5f, y + size + px(8), name.c_str(), Theme::TextDim.alpha(a));
+    }
+}
+

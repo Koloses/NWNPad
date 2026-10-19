@@ -1,5 +1,6 @@
 // NWNPad - gamepad HUD: hero frame, party, target frame, action cluster, message feed
 #include "hud.h"
+#include "hub_pages.h"
 #include "uikit.h"
 #include "game.h"
 #include "gamedata.h"
@@ -301,6 +302,7 @@ void HUD_Draw() {
     DrawTarget(pl);
     DrawActions();
     DrawFeed();
+    if (g_cfg.minimap) { float ms = px(230); Map_DrawMinimap(W() - px(40) - ms, px(40), ms, 0.95f); }
     if (GD::IsPaused()) {
         float w = px(260), h = px(56);
         UIK::Panel((W() - w) * 0.5f, H() * 0.28f, w, h, px(28));
