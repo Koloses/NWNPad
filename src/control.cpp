@@ -1,5 +1,6 @@
 // NWNPad - twin-stick gameplay controls
 #include "control.h"
+#include "hub_pages.h"
 #include "game.h"
 #include "hooks.h"
 #include "pad.h"
@@ -542,7 +543,7 @@ void Control_PreInput(void* in) {
     if (g_pad.Pressed(PB_DDOWN)) g_ctl.quickBank = (g_ctl.quickBank + 1) % 3;
     if (g_pad.Pressed(PB_DLEFT)) { SetMouse(GuiW() / 2, GuiH() / 2); HandleInputEvent(0x3e, 1); HandleInputEvent(0x3e, 0); }
     if (g_pad.Pressed(PB_DRIGHT)) { HandleInputEvent(0x60, 1); HandleInputEvent(0x60, 0); }   // pause
-    if (g_pad.Pressed(PB_BACK)) { HandleInputEvent(0x44, 1); HandleInputEvent(0x44, 0); }     // map
+    if (g_pad.Pressed(PB_BACK)) Hub_ShowTab("Map");     // hub map page
     if (g_pad.Pressed(PB_START)) Hub_Toggle();                                                // hub menu
 }
 

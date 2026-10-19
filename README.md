@@ -38,7 +38,7 @@ detects it and disables itself (see the log).
 | RB / LB (tap) | Next / previous target (locks it) |
 | Right stick click | Release the target lock |
 | Start | Hub menu |
-| Back | Area map |
+| Back | Map (hub Map tab) |
 
 The target is picked automatically from what is in front of the hero; enemies are preferred.
 
