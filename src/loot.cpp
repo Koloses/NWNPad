@@ -9,11 +9,13 @@
 #include "pad.h"
 #include "config.h"
 #include "log.h"
+#include "item_details.h"
 #include "ui.h"
 #include <windows.h>
 #include <vector>
 #include <string>
 #include <cmath>
+#include <algorithm>
 #include <cstdio>
 
 using namespace G;
@@ -118,47 +120,57 @@ void Loot_Draw() {
     Refresh();
     float t = (float)fmin(1.0, (g_pad.now - LS.openTime) / 0.16);
     float a = 1 - (1 - t) * (1 - t);
-    float w = fminf(px(820), W() - px(60));
+    float dw = px(420);
+    float w = fminf(px(820) + dw + px(10), W() - px(60));
     float rowH = px(66);
     int n = (int)LS.items.size();
     int maxVis = (int)((H() - px(330)) / rowH);
     if (maxVis < 3) maxVis = 3;
     int vis = n < maxVis ? (n > 0 ? n : 1) : maxVis;
-    float h = px(96) + vis * rowH + px(30);
+    float h = fmaxf(px(96) + vis * rowH + px(30), n > 0 ? px(520) : 0.0f);
+    if (n > 0 && h > px(96) + vis * rowH + px(30)) {      // taller for the details pane: show more rows
+        vis = std::min(n, (int)((h - px(126)) / rowH)); if (vis < 1) vis = 1;
+    }
+    float lw = n > 0 ? w - dw - px(10) : w;
     float x = (W() - w) * 0.5f, y = (H() - h) * 0.5f - px(30) + (1 - a) * px(20);
     UIK::Panel(x, y, w, h, px(18), a);
     // header: container name + count
     Text(FONT_TITLE, px(30), x + px(30), y + px(22), LS.name.empty() ? "Container" : LS.name.c_str(), Theme::Gold.alpha(a));
     char cnt[32]; snprintf(cnt, sizeof cnt, n == 1 ? "%d item" : "%d items", n);
-    TextRight(FONT_BODY, px(20), x + w - px(30), y + px(30), cnt, Theme::TextFaint.alpha(a));
-    RoundRect(x + px(24), y + px(72), w - px(48), px(1), 0, Theme::Line.alpha(0.5f * a));
+    TextRight(FONT_BODY, px(20), x + lw - px(30), y + px(30), cnt, Theme::TextFaint.alpha(a));
+    RoundRect(x + px(24), y + px(72), lw - px(48), px(1), 0, Theme::Line.alpha(0.5f * a));
     float ly = y + px(86);
     if (LS.sel < LS.scroll) LS.scroll = LS.sel;
     if (LS.sel >= LS.scroll + vis) LS.scroll = LS.sel - vis + 1;
     if (LS.scroll > n - vis) LS.scroll = n - vis;
     if (LS.scroll < 0) LS.scroll = 0;
-    PushClip(x + px(10), ly, w - px(20), vis * rowH);
+    PushClip(x + px(10), ly, lw - px(20), vis * rowH);
     for (int i = LS.scroll; i < n && i < LS.scroll + vis + 1; i++) {
         const InvItem& it = LS.items[i];
         float ry = ly + (i - LS.scroll) * rowH;
         bool sel = i == LS.sel;
-        UIK::RowSel(x + px(18), ry + px(3), w - px(36), rowH - px(6), sel);
+        UIK::RowSel(x + px(18), ry + px(3), lw - px(36), rowH - px(6), sel);
         Inv::DrawIcon(it, x + px(28), ry + px(7), rowH - px(14), a);
         Col nc = it.identified ? (sel ? Col(255, 244, 222) : Theme::Text) : Col(150, 170, 220);
         float tx = x + px(28) + rowH + px(6);
-        TextFit(FONT_BODY, px(24), tx, ry + px(10), w - (tx - x) - px(120), it.name.c_str(), nc.alpha(a));
-        TextFit(FONT_BODY, px(17), tx, ry + px(37), w - (tx - x) - px(120), it.typeName.c_str(), Theme::TextFaint.alpha(a));
-        if (it.stack > 1) { char b[16]; snprintf(b, sizeof b, "x%d", it.stack); TextRight(FONT_BODY_BOLD, px(22), x + w - px(40), ry + px(20), b, Theme::GoldDim.alpha(a)); }
+        TextFit(FONT_BODY, px(24), tx, ry + px(10), lw - (tx - x) - px(120), it.name.c_str(), nc.alpha(a));
+        TextFit(FONT_BODY, px(17), tx, ry + px(37), lw - (tx - x) - px(120), it.typeName.c_str(), Theme::TextFaint.alpha(a));
+        if (it.stack > 1) { char b[16]; snprintf(b, sizeof b, "x%d", it.stack); TextRight(FONT_BODY_BOLD, px(22), x + lw - px(40), ry + px(20), b, Theme::GoldDim.alpha(a)); }
     }
     if (n == 0) TextCentered(FONT_BODY, px(22), x + w * 0.5f, ly + px(20), "Empty", Theme::TextFaint.alpha(a));
     PopClip();
-    UIK::Scrollbar(x + w - px(14), ly + px(4), vis * rowH - px(8), LS.scroll, vis, n);
+    UIK::Scrollbar(x + lw - px(14), ly + px(4), vis * rowH - px(8), LS.scroll, vis, n);
+    if (n > 0 && LS.sel < n) {
+        static ItemDetailsState ds;
+        UI_ItemDetails(LS.items[LS.sel], x + lw, y + px(20), dw - px(20), h - px(40), a, ds);
+    }
     HintItem hints[6]; int hn = 0;
     if (n > 0) {
         hints[hn++] = {GL_DPAD, "Choose"};
         hints[hn++] = {GL_A, "Take"};
         hints[hn++] = {GL_Y, "Take all"};
         hints[hn++] = {GL_X, "Examine"};
+        hints[hn++] = {GL_RS, "Scroll"};
     }
     hints[hn++] = {GL_B, "Close"};
     UI_DrawHints(hints, hn, a);

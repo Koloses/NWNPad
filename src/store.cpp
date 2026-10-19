@@ -10,6 +10,7 @@
 #include "pad.h"
 #include "config.h"
 #include "log.h"
+#include "item_details.h"
 #include "ui.h"
 #include <windows.h>
 #include <vector>
@@ -343,11 +344,12 @@ void Store_Draw() {
     float t = (float)fmin(1.0, (g_pad.now - SS.openTime) / 0.16);
     float a = 1 - (1 - t) * (1 - t);
     R::Rect(0, 0, (float)W(), (float)H(), Col(0, 0, 0, (int)(130 * a)));
-    float w = fminf(px(1500), W() - px(60));
+    float w = fminf(px(1760), W() - px(60));
     float h = fminf(px(860), H() - px(150));
     float x = (W() - w) * 0.5f, y = (H() - h) * 0.5f - px(30) + (1 - a) * px(20);
     UIK::Panel(x, y, w, h, px(20), a);
-    float colW = (w - px(36 * 2 + 30)) * 0.5f;
+    float dw = px(400);
+    float colW = (w - px(36 * 2 + 30 * 2) - dw) * 0.5f;
     float lx = x + px(36), rx = lx + colW + px(30);
     // headers
     float hy = y + px(22);
@@ -404,6 +406,19 @@ void Store_Draw() {
     float lh = y + h - ly - px(24);
     DrawList(0, lx, ly, colW, lh, a);
     DrawList(1, rx, ly, colW, lh, a);
+    {
+        float dx = rx + colW + px(30);
+        Text(FONT_TITLE, px(28), dx, hy, "Details", Theme::Gold.alpha(a));
+        auto& v = SS.col ? SS.pack : SS.wares;
+        int si = SS.sel[SS.col];
+        if (si >= 0 && si < (int)v.size()) {
+            static ItemDetailsState ds;
+            std::string extra;
+            if (SS.col == 0) extra = "Price " + Gp(BuyPrice(v[si]));
+            else { bool poor = false; int p = SellPrice(v[si], &poor); extra = p < 0 ? std::string("Not wanted here") : "Sells for " + Gp(p); }
+            UI_ItemDetails(v[si], dx, ly, dw, lh, a, ds, extra);
+        }
+    }
     // toast
     if (g_pad.now - SS.toastTime < 2.0) {
         float ta = (float)fmin(1.0, (2.0 - (g_pad.now - SS.toastTime)) / 0.4) * a;
@@ -413,10 +428,11 @@ void Store_Draw() {
         RoundRectBorder(tx2, ty2, tw, px(40), px(20), px(1), Theme::Line.alpha(ta));
         TextCentered(FONT_BODY, px(22), W() * 0.5f, ty2 + px(7), SS.toast.c_str(), Theme::Text.alpha(ta));
     }
-    HintItem hints[6]; int hn = 0;
+    HintItem hints[8]; int hn = 0;
     hints[hn++] = {GL_DPAD, "Choose"};
     hints[hn++] = {GL_A, SS.col == 0 ? "Buy" : "Sell"};
     hints[hn++] = {GL_Y, "Examine"};
+    hints[hn++] = {GL_RS, "Scroll"};
     hints[hn++] = {GL_LB, "Category"};
     if (NumPages() > 1) hints[hn++] = {GL_LT, "Page"};
     hints[hn++] = {GL_B, "Leave"};
