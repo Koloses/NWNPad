@@ -7,6 +7,7 @@
 #include "dialog.h"
 #include "hud.h"
 #include "hub.h"
+#include "describe.h"
 #include "quickbar.h"
 #include "loot.h"
 #include "store.h"
@@ -112,4 +113,5 @@ void UI_InstallHooks() {
     HUD_InstallHooks();
     QB_InstallHooks();
     Cursor_InstallHooks();
+    Describe_InstallHooks();
 }

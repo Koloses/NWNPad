@@ -2,6 +2,7 @@
 #include "hub.h"
 #include "inv.h"
 #include "quickbar.h"
+#include "describe.h"
 #include "uikit.h"
 #include "render.h"
 #include "game.h"
@@ -52,6 +53,7 @@ struct HubState {
     std::string toast; double toastTime = -10;
     Inv::CharInfo ch; double lastChar = -10;
     int qbBank = 0, qbSlot = 0;
+    uint32_t descId = 0; float descScroll = 0;
 } HS;
 
 std::vector<int> g_list;     // indices into HS.pack after filtering
@@ -160,6 +162,7 @@ void InventoryInput() {
     }
     const InvItem* it = Selected();
     if (HS.focus == 1) HS.selId = it ? it->id : 0;
+    if (fabsf(g_pad.ry) > 0.2f) HS.descScroll -= g_pad.ry * R::px(700.0f) * (float)g_pad.dt;
 
     if (g_pad.Pressed(PB_A)) {
         if (HS.focus == 0) {
@@ -323,33 +326,55 @@ void DrawInventory(float x, float y, float w, float h, float a) {
     const InvItem* it = Selected();
     float cy = dy + px(20);
     if (it) {
-        float is = px(128);
-        RoundRect(dx + (dw - is - px(24)) * 0.5f, cy, is + px(24), is + px(24), px(14), Col(0, 0, 0, (int)(90 * a)));
-        Inv::DrawIcon(*it, dx + (dw - is) * 0.5f, cy + px(12), is, a);
-        cy += is + px(40);
-        float th = TextWrap(FONT_TITLE, px(26), dx + px(20), cy, dw - px(40), it->name.c_str(), Theme::Gold.alpha(a), 1);
-        cy += th + px(6);
-        TextCentered(FONT_BODY, px(20), dx + dw * 0.5f, cy, it->typeName.c_str(), Theme::TextDim.alpha(a));
-        cy += px(34);
-        if (!it->identified) { TextCentered(FONT_BODY_BOLD, px(20), dx + dw * 0.5f, cy, "Unidentified", Col(150, 170, 220).alpha(a)); cy += px(30); }
-        if (it->stack > 1) { TextCentered(FONT_BODY, px(20), dx + dw * 0.5f, cy, Fmt("Stack: %d", it->stack).c_str(), Theme::Text.alpha(a)); cy += px(30); }
-        if (it->equippedSlot >= 0) {
-            TextCentered(FONT_BODY, px(20), dx + dw * 0.5f, cy, (std::string("Equipped: ") + Inv::SlotName(it->equippedSlot)).c_str(), Theme::Friendly.alpha(a));
-            cy += px(30);
-        } else if (it->equipMask & 0x3fff) {
+        float bottom = y + h - px(20);
+        // header: icon left, name / type / facts right
+        float is = px(84);
+        float ix = dx + px(18), iy = cy;
+        RoundRect(ix, iy, is + px(16), is + px(16), px(12), Col(0, 0, 0, (int)(90 * a)));
+        Inv::DrawIcon(*it, ix + px(8), iy + px(8), is, a);
+        float tx = ix + is + px(32), tw = dx + dw - px(18) - tx;
+        float ty = iy + px(2);
+        ty += TextWrap(FONT_TITLE, px(23), tx, ty, tw, it->name.c_str(), Theme::Gold.alpha(a)) + px(4);
+        Text(FONT_BODY, px(18), tx, ty, it->typeName.c_str(), Theme::TextDim.alpha(a)); ty += px(26);
+        std::string facts;
+        if (!it->identified) facts = "Unidentified";
+        else if (it->equippedSlot >= 0) facts = std::string("Equipped: ") + Inv::SlotName(it->equippedSlot);
+        if (it->stack > 1) { if (!facts.empty()) facts += "  -  "; facts += Fmt("Stack %d", it->stack); }
+        if (!facts.empty()) { TextFit(FONT_BODY_BOLD, px(17), tx, ty, tw, facts.c_str(), (!it->identified ? Col(150, 170, 220) : Theme::Friendly).alpha(a)); ty += px(24); }
+        cy = fmaxf(iy + is + px(28), ty + px(8));
+        if (it->equippedSlot < 0 && (it->equipMask & 0x3fff)) {
             std::string fits;
             for (int s = 0; s < ES_COUNT_PLAYER; s++)
                 if (it->equipMask & (1u << s)) { if (!fits.empty()) fits += ", "; fits += Inv::SlotName(s); }
-            cy += TextWrap(FONT_BODY, px(19), dx + px(20), cy, dw - px(40), ("Fits: " + fits).c_str(), Theme::TextDim.alpha(a), 1) + px(8);
+            cy += TextWrap(FONT_BODY, px(17), dx + px(20), cy, dw - px(40), ("Fits: " + fits).c_str(), Theme::TextFaint.alpha(a)) + px(8);
         }
-        // action list
-        float ay = y + h - px(20) - px(170);
-        float ax = dx + px(28);
-        if (HS.focus == 0) UIK::Hint(GL_A, "Unequip", ax, ay, px(30), a);
-        else if (HS.filterSlot >= 0 || Inv::BestSlot(pl, *it) >= 0) UIK::Hint(GL_A, "Equip", ax, ay, px(30), a);
-        else UIK::Hint(GL_A, "Use", ax, ay, px(30), a);
-        UIK::Hint(GL_X, "Actions…", ax, ay + px(44), px(30), a);
-        UIK::Hint(GL_Y, "Examine", ax, ay + px(88), px(30), a);
+        RoundRect(dx + px(18), cy, dw - px(36), px(1), 0, Theme::Line.alpha(0.4f * a));
+        cy += px(12);
+        // description (examine text), right stick scrolls
+        float dh = bottom - px(56) - cy;
+        const std::string* d = Describe_Get(it->id);
+        if (HS.descId != it->id) { HS.descId = it->id; HS.descScroll = 0; }
+        PushClip(dx + px(10), cy, dw - px(20), dh);
+        if (d) {
+            float full = TextWrap(FONT_BODY, px(18), 0, 0, dw - px(44), d->c_str(), Theme::Text, 0, 1.2f, true);
+            float maxS = fmaxf(0.0f, full - dh + px(10));
+            HS.descScroll = fminf(fmaxf(HS.descScroll, 0.0f), maxS);
+            TextWrap(FONT_BODY, px(18), dx + px(20), cy - HS.descScroll, dw - px(44), d->c_str(), Theme::Text.alpha(0.92f * a), 0, 1.2f);
+            if (maxS > 0) {
+                float th2 = dh * dh / full;
+                RoundRect(dx + dw - px(14), cy + (dh - th2) * (HS.descScroll / maxS), px(4), th2, px(2), Theme::GoldDim.alpha(a));
+            }
+        } else {
+            Text(FONT_BODY, px(18), dx + px(20), cy, "...", Theme::TextFaint.alpha(a));
+        }
+        PopClip();
+        // primary action
+        float ay = bottom - px(44);
+        float ax = dx + px(20);
+        const char* act = HS.focus == 0 ? "Unequip" : (HS.filterSlot >= 0 || Inv::BestSlot(pl, *it) >= 0) ? "Equip" : "Use";
+        ax += UIK::Hint(GL_A, act, ax, ay, px(28), a) + px(24);
+        ax += UIK::Hint(GL_X, "Actions", ax, ay, px(28), a) + px(24);
+        UIK::Hint(GL_RS, "Scroll", ax, ay, px(28), a);
     } else if (HS.focus == 0) {
         int s = GRID[HS.gr][HS.gc];
         TextCentered(FONT_TITLE, px(26), dx + dw * 0.5f, cy + px(40), Inv::SlotName(s), Theme::GoldDim.alpha(a));
