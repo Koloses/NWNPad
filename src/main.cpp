@@ -23,7 +23,7 @@ static void Init() {
     char path[MAX_PATH];
     snprintf(path, sizeof path, "%s\\NWNPad.log", g_dir);
     Log_Init(path);
-    Log("NWNPad 1.0 starting (%s), module base %p", exe, (void*)GetModuleHandleA("version.dll"));
+    Log("NWNPad 1.0 (built " __DATE__ " " __TIME__ ") starting (%s), module base %p", exe, (void*)GetModuleHandleA("version.dll"));
     snprintf(path, sizeof path, "%s\\NWNPad.ini", g_dir);
     Config_Load(path);
     if (!g_cfg.enabled) { Log("disabled in ini"); return; }
