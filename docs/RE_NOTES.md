@@ -203,3 +203,5 @@ Creature stats: gender +0x68, law/chaos +0xc6, good/evil +0xc8 (short, >= 70 law
 ## Pop-ups
 Hook ?Activate@CGuiModalPanel@@QEAAXXZ; classes CPanelOk, CPanelOkCancel, CPanelOkScroll, CPanelYesNoCancel.
 Buttons: exported OnOkButtonPressed / OnCancelButtonPressed / HandleYes/No/CancelButton.
+Game state icons over the portrait (level up 1, time stop 2, pause 4): CGuiInGame+0x370 bits;
+AddGameState 0x1406f3a40 (gig, mask), RemoveGameState 0x1406f7a80 (gig, mask).

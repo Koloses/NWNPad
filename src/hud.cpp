@@ -81,6 +81,19 @@ void ForEachGameHudPanel(bool hide) {
             }
         }
     }
+    // state icons the game puts over the (hidden) portrait in the top right corner: level up, time stop,
+    // pause (CGuiInGame+0x370 bits 1/2/4). The HUD shows its own; give them back when the HUD goes away.
+    typedef void (*gs_t)(void*, uint32_t);
+    static uint32_t removed = 0;
+    uint32_t st = F<uint32_t>(gig, 0x370) & 7;
+    if (hide && st) { ((gs_t)A(0x1406f7a80))(gig, st); removed |= st; }
+    if (!hide && removed) {
+        uint32_t back = removed & 2;
+        if ((removed & 1) && F<int>(gig, 0x2c)) back |= 1;
+        if ((removed & 4) && GD::IsPaused()) back |= 4;
+        if (back) ((gs_t)A(0x1406f3a40))(gig, back);
+        removed = 0;
+    }
 }
 
 void LogGameHud() {

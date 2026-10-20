@@ -398,6 +398,16 @@ static void DevCommands(void* player) {
         }
         return;
     }
+    if (strncmp(line, "gig", 3) == 0) {       // CGuiInGame members that are objects
+        void* in = Internal(); void* gig = in ? F<void*>(in, OFS::In_GuiInGame) : nullptr;
+        for (int off = 8; gig && off <= 0x400; off += 8) {
+            void* p = F<void*>(gig, off);
+            if (!p || ((uintptr_t)p & 7) || !Readable(p, 0xc0)) continue;
+            const char* cn = ClassName(p);
+            if (cn[0]) Log("dev: GIG+%#x %s flags %x", off, cn, F<uint32_t>(p, 0xb0));
+        }
+        return;
+    }
     if (strncmp(line, "levelup", 7) == 0) {   // ask the server to start a level-up
         typedef void (*fn)();
         ((fn)A(0x1406f5c20))();
