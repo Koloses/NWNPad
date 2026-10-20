@@ -157,3 +157,49 @@ X +0xa68; the sound button is removed in EE.
 Examine request: CNWCMessage::SendPlayerToServerInput_Examine 0x1407be580 (msg, id); reply handled by
 HandleServerToPlayerExamineGui_ItemData 0x140798ce0, which fills StringGob texts (SetText / AddText / AddLine
 exports) of a new examine window; capture the outermost calls and close the window with CGuiModalPanel::Deactivate.
+
+## Inventory actions (Win)
+Split stack 0x1407beb50 (msg, id, count) = message 6/0x17; merge 0x1407be890 (msg, into, from) = 6/0x16;
+open a bag = UseObject 0x1407bf2c0 (msg, id, 0, 0); put into a bag = RepositoryMove 0x1407bfb30 (msg, id, 0xff, 0xff, bag).
+baseitems.2da Container / Stacking columns.
+
+## Party (Win)
+CNWCCreature::PerformQuickChat 0x140803f40 (creature, voice id): follow 22, guard 9, attack 0, stand ground 10,
+heal me 4. Associate command 0x1407bdbe0 (msg, associate, cmd): party stealth -22, search -23.
+Possess familiar / return 0x1407bea40 (msg). Controlled associate type 0x1406a9820 (app) (3 = familiar);
+creature associate type +0x274.
+
+## Metamagic and domains
+Feats: Empower 11 -> metamagic bit 1 (+2 levels), Extend 12 -> 2 (+1), Maximize 25 -> 4 (+3), Quicken 29 -> 8 (+4),
+Silent 33 -> 16 (+1), Still 37 -> 32 (+1). spells.2da MetaMagic column = allowed bits. Feats list stats+0x118 / count +0x120.
+Domain ids: class info +0x14b / +0x14c; domains.2da Level_N = domain spell of level N.
+
+## Classic panels (generic access)
+CGuiObject::ImportLayoutData 0x1401fc470 (object, panel, layout name) names every control; CGuiPanel::Activate
+0x1401fa230 / Deactivate 0x1401fa830; ?Hide@CGuiPanel / ?UnHide@CGuiPanel exports. CGuiObject flags +8 (bit0 disabled);
+CGuiPanel +0xb0 (bit0 active, bit1 hidden). Callbacks: CGuiButton obj +0x90 / fn +0x98; check / radio box obj +0x80 /
+fn +0x88 (int checked, state +0x90); CGuiTimerButton +0xd0 / +0xd8; tab buttons: index +0xa0, tab set +0xa8
+(array +0x18 / count +0x20, selected +0x10), click with ?HandleTabClick@CGuiTabSet@@IEAAXH@Z.
+?s_pCurrentEventObject@CGuiObject@@1PEAV1@EA must point to the clicked control.
+CGuiButtonListbox: selected +0x90, rows +0x98 / count +0xa0, ids +0x420 / count +0x428. CGuiClassButton enabled +0xc8.
+Skill rows: timer up / down buttons; feat / spell rows: CGuiMouseoverChildButton add-remove arrow then info.
+
+## Level-up and character creation (Win)
+Level-up mode: CGuiInGame+0x2c. Start level-up: 0x1406f5c20 (CGuiInGame::HandleLevelUpButton).
+Panels (layout names in brackets): CCharacterClassPanel (ClassListBox), CCharacterLevelUpAbilitiesPanel /
+CCharacterAbilitiesPanel (StrLabel/StrEdit/StrUpButton/StrDownButton ..., PointsEdit), CCharacterSkillsPanel
+(SkillsButtonBox), CCharacterFeatsPanel / CCharacterSpellsPanel (AvailBox, KnownBox, SpellLevel0..9),
+CCharacterSchoolsPanel, CCharacterDomainPanel, CCharacterFamiliarPanel (FamListBox, NameEditBox, GenNameButton),
+CCharacterLevelUpSummaryPanel (EditBox), CCharacterSexPanel / CCharacterAlignmentPanel (radio buttons),
+CCharacterRacePanel, CCharacterPackagesPanel (ClassListBox, ConfigurePckg), CCharacterInfoPanel (FirstNameEdit,
+LastNameEdit, SoundSetEdit, RandomButton). Common: OkButton, CancelButton, RecommendButton, ResetButton, HelpBox, Title.
+CCharacterGenerationPanel: step buttons GenderButton RaceButton PortraitButton ClassButton AlignButton AbilitiesButton
+PackagesButton CustomizeButton PlayButton (CGuiCharGenCompleteableButton, completed int +0xe8), encouraged button +0xc08,
+creature id +0xbe8, char sheet panel +0x1a0.
+CCharacterPortraitPanel: creature id +0x370, CGuiPortraitSelect +0x378 (resrefs 17 bytes at +0x408 / count +0x410,
+tab set +0xf0); textures <resref>h/l/m/s, art fills the top 100/128 of the texture.
+Creature stats: gender +0x68, law/chaos +0xc6, good/evil +0xc8 (short, >= 70 lawful / good, <= 30 chaotic / evil).
+
+## Pop-ups
+Hook ?Activate@CGuiModalPanel@@QEAAXXZ; classes CPanelOk, CPanelOkCancel, CPanelOkScroll, CPanelYesNoCancel.
+Buttons: exported OnOkButtonPressed / OnCancelButtonPressed / HandleYes/No/CancelButton.

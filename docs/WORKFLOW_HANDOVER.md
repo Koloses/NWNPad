@@ -152,6 +152,18 @@ rediscovering everything. Read it fully before starting.
 * `+TestNewModule` picks the first local-vault character by first name; copy a .bic with a
   renamed first name to test other classes (e.g. a wizard for spell preparation).
 
+* Many-panel screens (character creation, level-up) were done generically: hook the layout
+  loader to learn every control's name, hide the game panel, build a model from it every
+  frame and press its own buttons through their callbacks. One renderer then covers a dozen
+  panels; special cases (portrait grid, creation hub) are small additions. Find the
+  equivalent for NWN2 (UIScene XML names -> objects) early.
+* A button held when a new panel opens must not act on it (the A that opened the abilities
+  panel raised Strength): wait for all buttons to be released after a panel change.
+* Character creation is reached with `+LoadNewModule "<module>"` (character list), not the
+  module browser (Nuklear, empty under Wine).
+* Wine + llvmpipe drops scripted taps when the machine is busy: re-run a flaky check before
+  hunting a bug, and poll for log lines instead of fixed sleeps.
+
 ## 7. Suggested plan for NWN2Pad
 
 1. Stage `nwn2main.exe` (+ any DLLs), check bitness, imports, RTTI; start full Ghidra

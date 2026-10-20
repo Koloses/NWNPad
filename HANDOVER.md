@@ -23,6 +23,9 @@ Hooks (MinHook):
 | `ShowDialogEntry / ShowDialogReplies` | feeds the conversation window |
 | `AppendToMsgBuffer` | HUD message feed |
 | `CGuiMan::ShowTooltipText` | captures quickbar slot names |
+| `CGuiObject::ImportLayoutData` | records every control a classic panel loads by layout name (`guiscan.cpp`) |
+| `CGuiPanel::Activate / Deactivate` | list of live panels (non-modal level-up panels included) |
+| `CGuiModalPanel::Activate` | game pop-ups (OK, OK/Cancel, OK scroll, Yes/No/Cancel) for `popup.cpp` |
 
 ## Source map (`src/`)
 
@@ -48,11 +51,15 @@ Hooks (MinHook):
 | `loot.*` | container window (chests, corpses) |
 | `store.*` | merchant window |
 | `quickbar.*` | quickbar names, icons, assign radial |
+| `guiscan.*` | generic access to classic panels: controls by layout name, texts (StringGob), enabled state, clicking through the controls' own callbacks (buttons, timer buttons, check / radio boxes, tab sets) |
+| `charpanel.*` | pad UI for character creation and level-up: builds a model from the hidden game panel each frame (lists, ability rows, radio groups, help, points, spell levels, buttons); creation hub, portrait grid, name / voice step |
+| `popup.*` | game message boxes as gamepad dialogs |
+| `party.*` | party command wheel (left stick click) |
 | `navcursor.*` | gamepad cursor for every other game panel (front end, level-up, spell book, journal, options ...) |
 | `res.*`, `text.*`, `gamedata.*` | resources (TGA/DDS/PLT), TLK strings, code page conversion, creature data |
 
-Input routing per frame (`Control_UIWantsInput`): dialogue -> game panels needing the cursor ->
-merchant -> loot -> hub -> gameplay. The radial menu and the targeting mode always go to the
+Input routing per frame (`Control_UIWantsInput`): pop-ups -> character panels -> dialogue ->
+game panels needing the cursor -> merchant -> loot -> hub -> party wheel -> gameplay. The radial menu and the targeting mode always go to the
 gameplay layer (`control.cpp`), also when opened from the hub.
 
 ## Reverse engineering
@@ -70,8 +77,10 @@ Wine 9 + Xvfb + llvmpipe, game launched with `+TestNewModule "Prelude"` /
 `"Contest Of Champions 0492"`. The `[Developer] InjectFile` setting makes the pad read
 `buttons lx ly rx ry lt rt` from a text file every frame; `<InjectFile>.cmd` accepts
 `target <name>` (lock the soft target), `use <name>` (default action on an object),
-`ev <hex>` (fire a game input event), `journal` (log quest counts) and `probe` (log screen
-projection). `tools/wine-test/regress.sh` runs the end-to-end checks. Console cheats
+`ev <hex>` (fire a game input event), `journal` (log quest counts), `probe` (log screen
+projection), `panel` (dump live panels and their controls), `click <LayoutName>`, `levelup`
+and `tda <2da> <row|-1>`. Character creation is reached with `+LoadNewModule "Prelude"`
+(character list) and New Character. `tools/wine-test/regress.sh` runs the end-to-end checks. Console cheats
 (`DebugMode 1`, `dm_spawncreature`, ...) were typed with xdotool. Verified: movement, camera,
 targeting, interact, hold-A radial and wheel selection, quickslots, spell targeting confirm,
 conversation, hub tabs, equip / unequip, item radial, examine, quickbar assign radial,
@@ -79,7 +88,12 @@ spells page (bard: cast, quickbar assign; wizard: cast, prepare, clear), journal
 quest), map (Prelude / Chapter 1 areas), save to a new slot, save list with previews,
 item descriptions in inventory / loot / merchant,
 container loot / take / close, merchant buy / sell / tabs / pages / close, game panels with the
-cursor (main menu, options, character sheet, spell book, journal, map), rest.
+cursor (main menu, options, character sheet, spell book, journal, map), rest, inventory item
+menu (split, combine, open bag, put in bag, sort), wizard Empowered and cleric domain
+preparation, party wheel follow, quit confirmation pop-up, full level-up (wizard: class,
+abilities, skills, spells, familiar, summary), full character creation (gender, race,
+portrait, class, alignment, abilities, configure package: skills, feats, school, spells,
+familiar; appearance, name / voice; play).
 
 Not covered in Wine: real XInput hardware, rumble, multiplayer servers, DM client,
 hostile-creature melee (attack goes through the game's own default action / radial).
@@ -88,9 +102,7 @@ the Load list sends exactly the same request as that panel.
 
 ## Ideas for next steps
 
-* Metamagic preparation and domain slot changes on the Spells page (done in the game's
-  memorization panel today).
-* Typing a save name (an on-screen keyboard); new saves are named after the area and time.
-* Level-up and character creation screens on the pad UI.
+* Typing a save name or character name (an on-screen keyboard); today the game's panel takes over.
+* Appearance step of character creation (needs the 3D model viewer); uses the cursor.
 * Quick item wheel (potions / scrolls) on a long press.
-* Split / merge stacks and container bags inside the inventory screen.
+* Deity / age fields of character creation (cursor panel).

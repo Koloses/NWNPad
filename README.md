@@ -2,9 +2,10 @@
 
 Xbox / XInput gamepad mod for **Neverwinter Nights: Enhanced Edition** (Windows, build 8193.37).
 It plays like a modern twin-stick action RPG and replaces the mouse-driven interface with
-gamepad screens: HUD, conversation window, hub menu (inventory, character, quickbar), loot
-window and merchant. Every other game panel (main menu, character creation, level-up, spell
-book, journal, map, options) gets a gamepad cursor that jumps between controls.
+gamepad screens: HUD with minimap, conversation window, hub menu (inventory, character,
+quickbar, spells, journal, map, system), loot window, merchant, party orders, game pop-ups,
+character creation and level-up. Every other game panel (main menu, appearance, options ...)
+gets a gamepad cursor that jumps between controls.
 
 Everything was built from a decompilation of the game executable; no game files are changed.
 
@@ -37,6 +38,7 @@ detects it and disables itself (see the log).
 | D-pad right | Pause |
 | RB / LB (tap) | Next / previous target (locks it) |
 | Right stick click | Release the target lock |
+| Left stick click | Party wheel (orders for henchmen, companions, summons, familiar) |
 | Start | Hub menu |
 | Back | Map (hub Map tab) |
 
@@ -46,6 +48,13 @@ facing, party (green), enemies (red), other people and map notes. Back opens the
 The target is picked automatically from what is in front of the hero; enemies are preferred.
 
 **Action wheels:** point with either stick, A selects, Y goes back one level, B closes.
+
+**Party wheel** (left stick click): Follow me, Guard me, Attack, Hold position, Heal me,
+Stealth and Search (whole party), Possess familiar / Return to master. Point, A orders,
+B or left stick click closes.
+
+**Level up:** when enough experience is gathered the HUD shows "Level up ready"; Start >
+Character > X starts it.
 
 **Spells and items that need a target:** A uses it on the highlighted target (or on the ground
 ahead of the hero when nothing is highlighted), RB / LB change the target, Y targets yourself,
@@ -57,17 +66,21 @@ LB / RB switch tabs: Inventory, Character, Quickbar, Spells, Journal, Map, Syste
 
 * **Inventory** - equipment on the left, backpack in the middle, details on the right.
   A on an equipped slot unequips it; A on an empty slot lists the backpack items that fit it.
-  A on a backpack item equips it (or uses it). X opens the item's action wheel (use, drop,
-  split ...), Y examines it.
+  A on a backpack item equips it (or uses it; A on a bag opens it). X opens the item menu:
+  equip, use, split stack (d-pad sets the amount, LT / RT min / max), combine stacks, open,
+  put in a bag, drop, examine, more actions (the game's wheel). Y examines, left stick click
+  cycles the backpack order (as carried, name, type, value).
 * **Character** - abilities, hit points, armour class, attack bonus, experience, gold.
-  A opens the full character sheet (level-up), Y rests.
+  A opens the full character sheet, X levels up when available, Y rests.
 * **Quickbar** - all 36 slots with the button that triggers each one. A opens the game's
   assign wheel for the slot (spells, feats, skills, items, commands), X uses the slot,
   Y makes the set active.
 * **Spells** - spells of each casting class by level (LT / RT or d-pad left / right change the
   level, Y the class). A casts (then pick the target as usual), X puts the spell on the
   quickbar (choose the slot, A places it). Prepared casters (wizard, cleric ...) press View to
-  prepare: A on a slot picks a spell, X clears it; new preparations are ready after resting.
+  prepare: A on a slot picks a spell (metamagic versions, e.g. Empowered, appear when you
+  have the feat and a slot of the right level; clerics also fill their domain slots), X clears
+  it; new preparations are ready after resting.
   The right pane shows the spell's description (right stick scrolls).
 * **Journal** - active and completed quests (X switches), the newest entry of the selected
   quest on the right.
@@ -94,6 +107,25 @@ B closes. The selected item's description is shown on the right.
 Left list is the merchant, right list your backpack (d-pad left / right switches). A buys or
 sells, Y examines, LB / RB change the category, LT / RT the page, B leaves. Prices the
 merchant will pay are shown next to your items; red prices are out of reach.
+
+### Character creation and level-up
+
+Character creation (New Character on the character list) shows the steps in order with the
+character so far: gender, race, portrait, class, alignment, abilities, package, customize,
+play. A opens a step, Start plays when everything is done, View resets, B cancels.
+
+In every step and in the level-up screens: d-pad / left stick choose, A picks (single choice)
+or raises / adds, X lowers / removes, LB / RB switch between lists (available / chosen),
+LT / RT change the spell level, Y takes the recommended choices, Start confirms, B goes back,
+the right stick scrolls the description. The package step has X for Configure (choose skills,
+feats and spells yourself). Portraits are a grid (LB / RB page). Appearance uses the gamepad
+cursor (it needs the 3D preview); on the name and voice step View generates a name and X
+switches to the game's panel to type a name or description.
+
+### Pop-ups
+
+Game messages (OK, OK / Cancel, Yes / No / Cancel) are shown as gamepad dialogs: A confirms,
+X answers No, B cancels.
 
 ### Game panels (gamepad cursor)
 

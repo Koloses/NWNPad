@@ -31,13 +31,14 @@ p1=$(grep "probe player" $LOG | tail -1)
 chk 10 "hub: open" 0.2 "Start opens the hub (pages)"
 sleep 0.6
 ./tap.sh 200 0.3; sleep 1.5      # quickbar -> spells
+for i in 1 2 3 4 5 6 7 8; do grep -q "2da: spells" $LOG && break; sleep 1; done
 ./shot.sh /tmp/r_spells.png
 grep -q "2da: spells" $LOG && ok "Spells page reads spells.2da" || bad "Spells page reads spells.2da"
 chk 200 "journal: screen open" 0.3 "Journal page asks the server for quests"
 chk 200 "map: area" 0.3 "Map page reads the area"
 sleep 1; ./shot.sh /tmp/r_map.png
-./tap.sh 200 0.3; sleep 0.9
-./tap.sh 2 0.2; sleep 0.5; ./tap.sh 2 0.2; sleep 0.5; ./tap.sh 2 0.2; sleep 0.5
+./tap.sh 200 0.3; sleep 2
+./tap.sh 2 0.3; sleep 0.8; ./tap.sh 2 0.3; sleep 0.8; ./tap.sh 2 0.3; sleep 0.8
 chk 1000 "system: [0-9]* saves" 0.3 "System page lists saves"
 sleep 1; ./shot.sh /tmp/r_load.png
 ./tap.sh 2000 0.3; sleep 0.5; ./tap.sh 2000 0.3; sleep 1
