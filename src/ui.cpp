@@ -11,6 +11,7 @@
 #include "describe.h"
 #include "quickbar.h"
 #include "loot.h"
+#include "party.h"
 #include "store.h"
 #include "game.h"
 #include "gamedata.h"
@@ -55,6 +56,7 @@ bool Control_UIWantsInput() {
     if (Store_Input()) return true;
     if (Loot_Input()) return true;
     if (Hub_Input()) return true;
+    if (Party_Input()) return true;
     // hide the mouse pointer while playing with the pad
     if (g_cfg.hideCursorWithPad) Cursor_SetMouseVisible(false);
     return false;
@@ -72,7 +74,7 @@ static void UI_Frame(HDC hdc) {
         bool hub = Hub_Open() && !Cursor_Active();
         bool loot = Loot_Active() && !Cursor_Active();
         bool store = Store_Active() && !Cursor_Active();
-        if (!Dialog_Active() && !Cursor_Active() && !hub && !loot && !store && UI_PadPresent()) HUD_Draw();
+        if (!Dialog_Active() && !Cursor_Active() && !hub && !loot && !store && UI_PadPresent()) { HUD_Draw(); Party_Draw(); }
         Dialog_Draw();
         if (hub) Hub_Draw();
         if (loot) Loot_Draw();
