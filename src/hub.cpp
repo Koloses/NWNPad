@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
 
 using namespace G;
 using namespace R;
@@ -57,7 +58,18 @@ struct HubState {
     Inv::CharInfo ch; double lastChar = -10;
     int qbBank = 0, qbSlot = 0;
     uint32_t descId = 0; float descScroll = 0;
+    int sortMode = 0;            // 0 backpack order, 1 name, 2 type, 3 value
+    // item action menu / split picker
+    enum { M_NONE, M_ACTIONS, M_BAGS, M_SPLIT } menu = M_NONE;
+    std::vector<int> acts; int actSel = 0;
+    uint32_t actItem = 0;
+    std::vector<uint32_t> bags; int bagSel = 0;
+    int splitN = 1, splitMax = 1;
+    // combine stacks: one merge per server round trip
+    bool merging = false; int mergeBase = -1; std::string mergeName; double mergeNext = 0, mergeEnd = 0;
 } HS;
+
+const char* SORT_NAMES[4] = {"Backpack order", "Name", "Type", "Value"};
 
 std::vector<int> g_list;     // indices into HS.pack after filtering
 
@@ -65,6 +77,14 @@ void Refresh(bool force = false) {
     if (!force && g_pad.now - HS.lastGather < 0.25) return;
     HS.lastGather = g_pad.now;
     Inv::Gather(Player(), HS.pack, HS.eq);
+    if (HS.sortMode) {
+        int m = HS.sortMode;
+        std::stable_sort(HS.pack.begin(), HS.pack.end(), [m](const InvItem& a, const InvItem& b) {
+            if (m == 2 && a.typeName != b.typeName) return a.typeName < b.typeName;
+            if (m == 3 && a.cost != b.cost) return a.cost > b.cost;
+            return a.name < b.name;
+        });
+    }
     g_list.clear();
     for (int i = 0; i < (int)HS.pack.size(); i++) {
         if (HS.filterSlot >= 0 && !(HS.pack[i].equipMask & (1u << HS.filterSlot))) continue;
@@ -155,7 +175,170 @@ void MoveGrid(int dr, int dc) {
     }
 }
 
+// ---- item actions ----------------------------------------------------------------------------
+enum ItemAct { IA_EQUIP, IA_USE, IA_SPLIT, IA_MERGE, IA_OPEN, IA_TOBAG, IA_DROP, IA_EXAMINE, IA_MORE };
+const char* ActName(int a) {
+    static const char* N[] = {"Equip", "Use", "Split stack", "Combine stacks", "Open", "Put in a bag", "Drop", "Examine", "More actions"};
+    return N[a];
+}
+const InvItem* FindPack(uint32_t id) {
+    for (auto& it : HS.pack) if (it.id == id) return &it;
+    for (auto& it : HS.eq) if (it.item && it.id == id) return &it;
+    return nullptr;
+}
+std::vector<const InvItem*> SameStacks(const InvItem& it) {
+    std::vector<const InvItem*> v;
+    if (Inv::MaxStack(it) <= 1) return v;
+    for (auto& o : HS.pack) if (o.id != it.id && o.baseItem == it.baseItem && o.name == it.name && o.identified == it.identified) v.push_back(&o);
+    return v;
+}
+void OpenActions(const InvItem& it) {
+    void* pl = Player();
+    HS.acts.clear();
+    HS.actItem = it.id;
+    if (it.equippedSlot < 0) {
+        if (Inv::BestSlot(pl, it) >= 0) HS.acts.push_back(IA_EQUIP);
+        if (Inv::IsContainer(it)) HS.acts.push_back(IA_OPEN);
+        else if (Inv::BestSlot(pl, it) < 0) HS.acts.push_back(IA_USE);
+        if (it.stack > 1) HS.acts.push_back(IA_SPLIT);
+        if (!SameStacks(it).empty()) HS.acts.push_back(IA_MERGE);
+        if (!Inv::IsContainer(it)) for (auto& o : HS.pack) if (Inv::IsContainer(o)) { HS.acts.push_back(IA_TOBAG); break; }
+        HS.acts.push_back(IA_DROP);
+    }
+    HS.acts.push_back(IA_EXAMINE);
+    HS.acts.push_back(IA_MORE);
+    HS.actSel = 0;
+    HS.menu = HubState::M_ACTIONS;
+}
+void DoAction(int a) {
+    void* pl = Player();
+    const InvItem* it = FindPack(HS.actItem);
+    HS.menu = HubState::M_NONE;
+    if (!it) return;
+    InvItem c = *it;
+    switch (a) {
+    case IA_EQUIP: Inv::Equip(pl, c, -1); Toast("Equipped " + c.name); break;
+    case IA_USE: CenterMouse(); Inv::OpenRadial(c.id); break;
+    case IA_SPLIT:
+        HS.splitMax = c.stack - 1; HS.splitN = std::max(1, c.stack / 2);
+        HS.menu = HubState::M_SPLIT; return;
+    case IA_MERGE:
+        HS.merging = true; HS.mergeBase = c.baseItem; HS.mergeName = c.name;
+        HS.mergeNext = 0; HS.mergeEnd = g_pad.now + 6.0;
+        Toast("Combined " + c.name); break;
+    case IA_OPEN: Inv::OpenBag(c.id); Hub_Close(); return;
+    case IA_TOBAG:
+        HS.bags.clear();
+        for (auto& o : HS.pack) if (Inv::IsContainer(o)) HS.bags.push_back(o.id);
+        HS.bagSel = 0; HS.menu = HubState::M_BAGS; return;
+    case IA_DROP: Inv::Drop(pl, c.id); Toast("Dropped " + c.name); break;
+    case IA_EXAMINE: Inv::Examine(pl, c.id); break;
+    case IA_MORE: CenterMouse(); Inv::OpenRadial(c.id); break;
+    }
+    HS.lastGather = g_pad.now - 0.15;
+}
+// fill the fullest stack that still has room from the smallest one, until nothing moves
+void MergeStep() {
+    if (!HS.merging) return;
+    if (g_pad.now > HS.mergeEnd) { HS.merging = false; return; }
+    if (g_pad.now < HS.mergeNext) return;
+    std::vector<const InvItem*> v;
+    for (auto& o : HS.pack) if (o.baseItem == HS.mergeBase && o.name == HS.mergeName) v.push_back(&o);
+    if (v.size() < 2) { HS.merging = false; return; }
+    int mx = Inv::MaxStack(*v[0]);
+    std::sort(v.begin(), v.end(), [](const InvItem* a, const InvItem* b) { return a->stack > b->stack; });
+    const InvItem* into = nullptr;
+    for (auto* o : v) if (o->stack < mx) { into = o; break; }
+    const InvItem* from = v.back();
+    if (!into || into == from) { HS.merging = false; return; }
+    Inv::Merge(into->id, from->id);
+    HS.mergeNext = g_pad.now + 0.6;
+    HS.lastGather = g_pad.now - 0.5;
+}
+
+// returns true while a menu has the input
+bool MenuInput() {
+    if (HS.menu == HubState::M_NONE) return false;
+    if (g_pad.Pressed(PB_B)) { HS.menu = HS.menu == HubState::M_ACTIONS ? HubState::M_NONE : HubState::M_ACTIONS; return true; }
+    bool up = g_pad.Repeat(PB_DUP) || g_pad.Repeat(PB_LUP), down = g_pad.Repeat(PB_DDOWN) || g_pad.Repeat(PB_LDOWN);
+    bool left = g_pad.Repeat(PB_DLEFT) || g_pad.Repeat(PB_LLEFT), right = g_pad.Repeat(PB_DRIGHT) || g_pad.Repeat(PB_LRIGHT);
+    if (HS.menu == HubState::M_ACTIONS) {
+        int n = (int)HS.acts.size();
+        if (up) HS.actSel = (HS.actSel + n - 1) % n;
+        if (down) HS.actSel = (HS.actSel + 1) % n;
+        if (g_pad.Pressed(PB_A)) DoAction(HS.acts[HS.actSel]);
+    } else if (HS.menu == HubState::M_BAGS) {
+        int n = (int)HS.bags.size();
+        if (n && up) HS.bagSel = (HS.bagSel + n - 1) % n;
+        if (n && down) HS.bagSel = (HS.bagSel + 1) % n;
+        if (n && g_pad.Pressed(PB_A)) {
+            Inv::MoveToBag(HS.actItem, HS.bags[HS.bagSel]);
+            const InvItem* b = FindPack(HS.bags[HS.bagSel]);
+            Toast(std::string("Put into ") + (b ? b->name : "the bag"));
+            HS.menu = HubState::M_NONE; HS.lastGather = g_pad.now - 0.15;
+        }
+    } else if (HS.menu == HubState::M_SPLIT) {
+        int& v = HS.splitN;
+        if (right) v++;
+        if (left) v--;
+        if (up) v += 10;
+        if (down) v -= 10;
+        if (g_pad.Pressed(PB_RT)) v = HS.splitMax;
+        if (g_pad.Pressed(PB_LT)) v = 1;
+        v = std::max(1, std::min(HS.splitMax, v));
+        if (g_pad.Pressed(PB_A)) {
+            Inv::Split(HS.actItem, v);
+            Toast("Split off " + std::to_string(v));
+            HS.menu = HubState::M_NONE; HS.lastGather = g_pad.now - 0.15;
+        }
+    }
+    return true;
+}
+void DrawMenu(float x, float y, float w, float h, float a) {
+    if (HS.menu == HubState::M_NONE) return;
+    const InvItem* it = FindPack(HS.actItem);
+    R::Rect(x, y, w, h, Col(0, 0, 0, (int)(120 * a)));
+    float mw = px(520);
+    std::string title = it ? it->name : std::string();
+    if (HS.menu == HubState::M_SPLIT) {
+        float mh = px(250), mx = x + (w - mw) * 0.5f, my = y + (h - mh) * 0.5f;
+        UIK::Panel(mx, my, mw, mh, px(16), a);
+        Text(FONT_TITLE, px(24), mx + px(28), my + px(22), "Split stack", Theme::Gold.alpha(a));
+        TextFit(FONT_BODY, px(19), mx + px(28), my + px(58), mw - px(56), title.c_str(), Theme::TextDim.alpha(a));
+        char b[64]; snprintf(b, sizeof b, "%d", HS.splitN);
+        float cx = mx + mw * 0.5f, cy = my + px(104);
+        Triangle(cx - px(110), cy + px(22), cx - px(90), cy + px(10), cx - px(90), cy + px(34), Theme::GoldDim.alpha(a));
+        Triangle(cx + px(110), cy + px(22), cx + px(90), cy + px(10), cx + px(90), cy + px(34), Theme::GoldDim.alpha(a));
+        TextCentered(FONT_TITLE, px(44), cx, cy, b, Theme::Text.alpha(a));
+        char r[64]; snprintf(r, sizeof r, "of %d  -  %d stay", HS.splitMax + 1, HS.splitMax + 1 - HS.splitN);
+        TextCentered(FONT_BODY, px(18), cx, cy + px(58), r, Theme::TextFaint.alpha(a));
+        float hx = mx + px(28), hy = my + mh - px(46);
+        hx += UIK::Hint(GL_DPAD, "+1 / +10", hx, hy, px(26), a) + px(18);
+        hx += UIK::Hint(GL_A, "Split", hx, hy, px(26), a) + px(18);
+        UIK::Hint(GL_B, "Back", hx, hy, px(26), a);
+        return;
+    }
+    bool bags = HS.menu == HubState::M_BAGS;
+    int n = bags ? (int)HS.bags.size() : (int)HS.acts.size();
+    float rowH = px(48);
+    float mh = px(96) + n * rowH + px(16), mx = x + (w - mw) * 0.5f, my = y + (h - mh) * 0.5f;
+    UIK::Panel(mx, my, mw, mh, px(16), a);
+    Text(FONT_TITLE, px(24), mx + px(28), my + px(20), bags ? "Put in which bag?" : "Actions", Theme::Gold.alpha(a));
+    TextFit(FONT_BODY, px(19), mx + px(28), my + px(54), mw - px(56), title.c_str(), Theme::TextDim.alpha(a));
+    for (int i = 0; i < n; i++) {
+        float ry = my + px(90) + i * rowH;
+        bool sel = i == (bags ? HS.bagSel : HS.actSel);
+        UIK::RowSel(mx + px(16), ry, mw - px(32), rowH - px(6), sel);
+        std::string label;
+        if (bags) { const InvItem* b = FindPack(HS.bags[i]); label = b ? b->name : "Bag"; }
+        else label = ActName(HS.acts[i]);
+        Text(FONT_BODY, px(22), mx + px(34), ry + px(9), label.c_str(), (sel ? Col(255, 244, 222) : Theme::Text).alpha(a));
+    }
+}
+
 void InventoryInput() {
+    MergeStep();
+    if (MenuInput()) return;
     void* pl = Player();
     Refresh();
     bool up = g_pad.Repeat(PB_DUP) || g_pad.Repeat(PB_LUP);
@@ -198,6 +381,10 @@ void InventoryInput() {
             } else if (Inv::BestSlot(pl, *it) >= 0) {
                 Inv::Equip(pl, *it, -1);
                 Toast("Equipped " + it->name);
+            } else if (Inv::IsContainer(*it)) {
+                Inv::OpenBag(it->id);
+                Hub_Close();
+                return;
             } else {
                 CenterMouse();
                 Inv::OpenRadial(it->id);
@@ -205,7 +392,8 @@ void InventoryInput() {
             HS.lastGather = g_pad.now - 0.15;
         }
     }
-    if (g_pad.Pressed(PB_X) && it) { CenterMouse(); Inv::OpenRadial(it->id); }
+    if (g_pad.Pressed(PB_X) && it) OpenActions(*it);
+    if (g_pad.Pressed(PB_LS)) { HS.sortMode = (HS.sortMode + 1) % 4; Toast(std::string("Sort: ") + SORT_NAMES[HS.sortMode]); Refresh(true); }
     if (g_pad.Pressed(PB_Y) && it) { Inv::Examine(pl, it->id); }
     if (g_pad.Pressed(PB_B)) {
         if (HS.filterSlot >= 0) { HS.filterSlot = -1; HS.focus = 0; Refresh(true); }
@@ -305,7 +493,8 @@ void DrawInventory(float x, float y, float w, float h, float a) {
     // --- backpack list
     float lx = ex + ew + px(40), lw = dx - lx - px(30);
     float ly = y + px(18);
-    std::string title = HS.filterSlot >= 0 ? std::string("Backpack  ·  ") + Inv::SlotName(HS.filterSlot) : "Backpack";
+    std::string title = HS.filterSlot >= 0 ? std::string("Backpack  ·  ") + Inv::SlotName(HS.filterSlot)
+                      : HS.sortMode ? std::string("Backpack  ·  by ") + SORT_NAMES[HS.sortMode] : std::string("Backpack");
     SectionTitle(lx, ly, title.c_str(), a);
     TextRight(FONT_BODY, px(20), lx + lw, ly + px(2), Fmt((int)g_list.size() == 1 ? "%d item" : "%d items", (int)g_list.size()).c_str(), Theme::TextFaint.alpha(a));
     ly += px(40);
@@ -388,7 +577,7 @@ void DrawInventory(float x, float y, float w, float h, float a) {
         // primary action
         float ay = bottom - px(44);
         float ax = dx + px(20);
-        const char* act = HS.focus == 0 ? "Unequip" : (HS.filterSlot >= 0 || Inv::BestSlot(pl, *it) >= 0) ? "Equip" : "Use";
+        const char* act = HS.focus == 0 ? "Unequip" : (HS.filterSlot >= 0 || Inv::BestSlot(pl, *it) >= 0) ? "Equip" : Inv::IsContainer(*it) ? "Open" : "Use";
         ax += UIK::Hint(GL_A, act, ax, ay, px(28), a) + px(24);
         ax += UIK::Hint(GL_X, "Actions", ax, ay, px(28), a) + px(24);
         UIK::Hint(GL_RS, "Scroll", ax, ay, px(28), a);
@@ -398,6 +587,7 @@ void DrawInventory(float x, float y, float w, float h, float a) {
         TextCentered(FONT_BODY, px(20), dx + dw * 0.5f, cy + px(84), "Empty slot", Theme::TextFaint.alpha(a));
         UIK::Hint(GL_A, "Choose item", dx + px(28), y + h - px(20) - px(80), px(30), a);
     }
+    DrawMenu(x, y, w, h, a);
 }
 
 void AbilityBox(float x, float y, float w, const char* name, int v, float a) {
@@ -637,11 +827,16 @@ void Hub_Draw() {
     hints[n++] = {GL_LB, "Tabs"};
     if (TABS[HS.tab].page) {
         n += TABS[HS.tab].page->hints(hints + n);
+    } else if (HS.tab == 0 && HS.menu != HubState::M_NONE) {
+        hints[n++] = {GL_DPAD, HS.menu == HubState::M_SPLIT ? "Amount" : "Choose"};
+        hints[n++] = {GL_A, "Select"};
+        hints[n++] = {GL_B, "Back"};
     } else if (HS.tab == 0) {
         hints[n++] = {GL_DPAD, "Move"};
         hints[n++] = {GL_A, "Select"};
         hints[n++] = {GL_X, "Actions"};
         hints[n++] = {GL_Y, "Examine"};
+        hints[n++] = {GL_L3, "Sort"};
     } else if (HS.tab == 1) {
         hints[n++] = {GL_A, "Character sheet"};
         hints[n++] = {GL_Y, "Rest"};

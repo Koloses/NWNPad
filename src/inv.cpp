@@ -6,6 +6,7 @@
 #include "res.h"
 #include "render.h"
 #include "log.h"
+#include "twoda.h"
 #include <windows.h>
 #include <cstring>
 #include <algorithm>
@@ -24,6 +25,9 @@ const uintptr_t VA_App_GetNWCMessage = 0x1406a9600;    // (app)
 const uintptr_t VA_App_GetInventoryPanel = 0x1406a9250; // (app)
 const uintptr_t VA_Msg_RepositoryMove = 0x1407bfb30;   // (msg, item, x, y, repository)
 const uintptr_t VA_Msg_SendToServer = 0x1407c10c0;     // (msg, major, minor, data, size)
+const uintptr_t VA_Msg_SplitItem = 0x1407beb50;        // (msg, item, count)
+const uintptr_t VA_Msg_MergeItem = 0x1407be890;        // (msg, item in place, dropped item)
+const uintptr_t VA_Msg_UseObject = 0x1407bf2c0;        // (msg, object, 0, 0): opens a bag
 const uintptr_t VA_PanelInv_HandleXButton = 0x140854e80;   // (panel)
 const uintptr_t VA_Msg_GuiInventoryStatus = 0x1407bcc10;   // (msg, open, creatureId)
 const uintptr_t VA_Msg_GuiCharSheetStatus = 0x1407bc8d0;   // (msg, char page (-1 close), creatureId)
@@ -361,6 +365,46 @@ void OpenRadial(uint32_t id) {
     Log("item radial %08x", id);
     typedef void (*fn)(void*, int);
     ((fn)A(VA_Item_ActivateRadial))(it, 0);
+}
+
+void Split(uint32_t id, int count) {
+    void* m = Msg();
+    if (!m || count < 1) return;
+    Log("split %08x %d", id, count);
+    typedef void (*fn)(void*, uint32_t, uint16_t);
+    ((fn)A(VA_Msg_SplitItem))(m, id, (uint16_t)count);
+}
+
+void Merge(uint32_t into, uint32_t from) {
+    void* m = Msg();
+    if (!m || into == from) return;
+    Log("merge %08x <- %08x", into, from);
+    typedef void (*fn)(void*, uint32_t, uint32_t);
+    ((fn)A(VA_Msg_MergeItem))(m, into, from);
+}
+
+void OpenBag(uint32_t id) {
+    void* m = Msg();
+    if (!m) return;
+    Log("open bag %08x", id);
+    typedef void (*fn)(void*, uint32_t, int, int);
+    ((fn)A(VA_Msg_UseObject))(m, id, 0, 0);
+}
+
+void MoveToBag(uint32_t id, uint32_t bag) {
+    void* m = Msg();
+    if (!m) return;
+    Log("move %08x to bag %08x", id, bag);
+    typedef void (*fn)(void*, uint32_t, uint8_t, uint8_t, uint32_t);
+    ((fn)A(VA_Msg_RepositoryMove))(m, id, 0xff, 0xff, bag);
+}
+
+bool IsContainer(const InvItem& it) {
+    return it.baseItem >= 0 && TDA("baseitems").Int(it.baseItem, "Container", 0) != 0;
+}
+
+int MaxStack(const InvItem& it) {
+    return it.baseItem >= 0 ? std::max(1, TDA("baseitems").Int(it.baseItem, "Stacking", 1)) : 1;
 }
 
 const char* SlotName(int s) {

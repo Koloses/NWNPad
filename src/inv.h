@@ -47,6 +47,12 @@ void SetGuiOpen(void* creature, bool open);
 // same for the character sheet (server then sends experience etc.)
 void SetCharSheetOpen(void* creature, bool open);
 void OpenRadial(uint32_t itemId);
+void Split(uint32_t itemId, int count);                     // new stack of `count` split off
+void Merge(uint32_t intoId, uint32_t fromId);               // combine two stacks of the same item
+void OpenBag(uint32_t bagId);                               // open a bag in the backpack (container window)
+void MoveToBag(uint32_t itemId, uint32_t bagId);
+bool IsContainer(const InvItem& it);                        // bag / box that holds items
+int  MaxStack(const InvItem& it);
 int  BestSlot(void* creature, const InvItem& it);           // -1 if not equippable
 const char* SlotName(int slot);
 void* Message();                            // CNWCMessage*
