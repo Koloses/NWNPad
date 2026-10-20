@@ -13,6 +13,8 @@
 #include "loot.h"
 #include "party.h"
 #include "popup.h"
+#include "guiscan.h"
+#include "charpanel.h"
 #include "store.h"
 #include "game.h"
 #include "gamedata.h"
@@ -34,6 +36,7 @@ bool UI_PanelHandled(void* panel) {
     if (panel && panel == Loot_Panel() && Loot_Active()) return true;
     if (Store_PanelHandled(panel)) return true;
     if (Popup_Handled(panel)) return true;
+    if (CharPanel_Handled(panel)) return true;
     return false;
 }
 
@@ -48,10 +51,12 @@ bool UI_PadPresent() {
 bool Control_UIWantsInput() {
     void* pl = G::Player();
     HUD_UpdatePanels(pl != nullptr && UI_PadPresent());
-    if (!g_pad.connected) { Popup_Frame(); Cursor_SetMouseVisible(true); return false; }
+    if (!g_pad.connected) { Popup_Frame(); CharPanel_Frame(); Cursor_SetMouseVisible(true); return false; }
     HubSystem_Update();
     Popup_Frame();
+    CharPanel_Frame();
     if (Popup_Input()) { Cursor_Update(false); return true; }
+    if (CharPanel_Input()) { Cursor_Update(false); return true; }
     if (Dialog_Input()) { Cursor_Update(false); return true; }
     bool needCursor = Cursor_GameNeedsCursor(Dialog_Active());
     Cursor_Update(needCursor);
@@ -78,12 +83,13 @@ static void UI_Frame(HDC hdc) {
         bool hub = Hub_Open() && !Cursor_Active();
         bool loot = Loot_Active() && !Cursor_Active();
         bool store = Store_Active() && !Cursor_Active();
-        if (!Dialog_Active() && !Cursor_Active() && !hub && !loot && !store && UI_PadPresent()) { HUD_Draw(); Party_Draw(); }
+        if (!Dialog_Active() && !Cursor_Active() && !hub && !loot && !store && !CharPanel_Active() && UI_PadPresent()) { HUD_Draw(); Party_Draw(); }
         Dialog_Draw();
         if (hub) Hub_Draw();
         if (loot) Loot_Draw();
         if (store) Store_Draw();
     }
+    if (g_pad.connected) CharPanel_Draw();
     if (g_pad.connected) Popup_Draw();
     if (g_pad.connected) Cursor_Draw();
     bool menus = Hub_Open() || Loot_Active() || Store_Active();
@@ -111,6 +117,7 @@ void UI_Init(const char*) {
     Hub_Init();
     Loot_Init();
     Store_Init();
+    CharPanel_Init();
 }
 
 void UI_InstallHooks() {
@@ -124,4 +131,5 @@ void UI_InstallHooks() {
     Cursor_InstallHooks();
     Describe_InstallHooks();
     Popup_InstallHooks();
+    Gui_InstallHooks();
 }

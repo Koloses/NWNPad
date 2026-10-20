@@ -115,6 +115,12 @@ int Level(void* cre) {
     return st ? fGetLevel(st) : 0;
 }
 
+bool LevelUpReady() {      // CGuiInGame+0x2c: level-up mode (set by the server when enough XP)
+    void* in = Internal();
+    void* gig = in ? F<void*>(in, OFS::In_GuiInGame) : nullptr;
+    return gig && F<int>(gig, 0x2c) != 0;
+}
+
 bool IsPaused() {
     typedef int (*fn)(void*, uint8_t);
     void* app = App();

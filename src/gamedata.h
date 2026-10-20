@@ -17,6 +17,7 @@ uint32_t MasterId(void* creature);
 std::vector<void*> PartyMembers(void* player);              // associates in the area
 int Level(void* creature);
 bool IsPaused();
+bool LevelUpReady();
 int Language();                                              // client language id
 std::string LocStr(const void* exoLocString);               // text in the client language (UTF-8, colour tokens removed)
 }

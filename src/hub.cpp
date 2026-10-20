@@ -412,7 +412,16 @@ void QuickbarInput() {
     if (g_pad.Pressed(PB_B)) Hub_Close();
 }
 
+bool LevelUpReady() { return GD::LevelUpReady() || (HS.ch.ok && HS.ch.xpNext > 0 && HS.ch.xp >= HS.ch.xpNext); }
+
 void CharacterInput() {
+    if (g_pad.Pressed(PB_X) && LevelUpReady()) {
+        Hub_Close();
+        typedef void (*fn)();
+        ((fn)A(0x1406f5c20))();          // CGuiInGame::HandleLevelUpButton
+        Log("hub: level up");
+        return;
+    }
     if (g_pad.Pressed(PB_A)) OpenExternal(HS.tab, 0x42);
     if (g_pad.Pressed(PB_Y)) { Hub_Close(); FireEvent(0x6b); }    // rest
     if (g_pad.Pressed(PB_B)) Hub_Close();
@@ -634,9 +643,10 @@ void DrawCharacter(float x, float y, float w, float h, float a) {
     iy += px(34);
     float xf = c.xpNext > c.xpCur ? (float)(c.xp - c.xpCur) / (float)(c.xpNext - c.xpCur) : 1.0f;
     UIK::Bar(ix, iy, iw, px(12), xf, Col(196, 160, 80), Col(30, 26, 20, (int)(220 * a)));
-    if (c.xpNext > 0 && c.xp >= c.xpNext) {
+    if (LevelUpReady()) {
         iy += px(20);
-        Text(FONT_BODY_BOLD, px(20), ix, iy, "Level up available — open the character sheet", Theme::Friendly.alpha(a));
+        float lw = Text(FONT_BODY_BOLD, px(20), ix, iy, "Level up available", Theme::Friendly.alpha(a));
+        UIK::Hint(GL_X, "Level up", ix + lw + px(24), iy - px(4), px(26), a);
     }
     iy += px(40);
     // abilities
@@ -838,6 +848,7 @@ void Hub_Draw() {
         hints[n++] = {GL_Y, "Examine"};
         hints[n++] = {GL_L3, "Sort"};
     } else if (HS.tab == 1) {
+        if (LevelUpReady()) hints[n++] = {GL_X, "Level up"};
         hints[n++] = {GL_A, "Character sheet"};
         hints[n++] = {GL_Y, "Rest"};
     } else if (HS.tab == 2) {

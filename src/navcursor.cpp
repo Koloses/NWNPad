@@ -196,8 +196,13 @@ bool Cursor_GameNeedsCursor(bool dialogHandled) {
         if (t == 0x524d6e75) return false;                       // radial menu: gameplay layer drives it
         if (t == 0x41635467 && !(Player() && F<int>(g, 0x90) > 0)) return false;   // action target (unless a modal panel is up)
     }
+    extern bool UI_PanelHandled(void* panel);
+    if (F<int>(g, 0x90) > 0) {                        // modal panel (unless NWNPad shows it)
+        void** arr = F<void**>(g, 0x88);
+        void* top = arr ? arr[F<int>(g, 0x90) - 1] : nullptr;
+        if (!UI_PanelHandled(top)) return true;
+    }
     if (!Player()) return true;                       // front-end menus, character creation, loading
-    if (F<int>(g, 0x90) > 0) return true;             // modal panel
     void* in = Internal();
     void* gig = in ? F<void*>(in, OFS::In_GuiInGame) : nullptr;
     if (gig) {
@@ -206,7 +211,6 @@ bool Cursor_GameNeedsCursor(bool dialogHandled) {
             void* p = F<void*>(gig, 0x3a0 + i * 8);
             if (!p) continue;
             if (dialogHandled && p == F<void*>(gig, 0x70)) continue;   // conversation handled by NWNPad
-            extern bool UI_PanelHandled(void* panel);
             if (UI_PanelHandled(p)) continue;
             return true;
         }

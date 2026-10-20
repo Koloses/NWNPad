@@ -1,5 +1,6 @@
 // NWNPad - gamepad HUD: hero frame, party, target frame, action cluster, message feed
 #include "hud.h"
+#include "inv.h"
 #include "hub_pages.h"
 #include "uikit.h"
 #include "game.h"
@@ -160,7 +161,13 @@ static void DrawHero(void* pl) {
     Text(FONT_TITLE, px(30), nx, ny, name.c_str(), Theme::Gold);
     char buf[64];
     snprintf(buf, sizeof buf, "Level %d", GD::Level(pl));
-    Text(FONT_BODY, px(20), nx, ny + px(36), buf, Theme::TextDim);
+    float lw = Text(FONT_BODY, px(20), nx, ny + px(36), buf, Theme::TextDim);
+    {
+        if (GD::LevelUpReady()) {
+            float pulse = 0.65f + 0.35f * sinf((float)g_pad.now * 3.0f);
+            Text(FONT_BODY_BOLD, px(19), nx + lw + px(18), ny + px(37), "Level up ready  (Start > Character)", Theme::Gold.alpha(pulse));
+        }
+    }
     // hp bar
     float bw = px(300), bh = px(14);
     float by = ny + px(66);
