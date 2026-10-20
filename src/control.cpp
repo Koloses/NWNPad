@@ -2,6 +2,7 @@
 #include "control.h"
 #include "hub_pages.h"
 #include "twoda.h"
+#include "guiscan.h"
 #include "game.h"
 #include "hooks.h"
 #include "pad.h"
@@ -352,7 +353,7 @@ static void QuickSlots() {
 
 // developer: "<InjectFile>.cmd" holding "target <name part>" locks the soft target (automated tests)
 static void DevCommands(void* player) {
-    if (!g_cfg.injectFile[0] || !player) return;
+    if (!g_cfg.injectFile[0]) return;
     static double next = 0;
     if (g_pad.now < next) return;
     next = g_pad.now + 0.25;
@@ -364,7 +365,7 @@ static void DevCommands(void* player) {
     fclose(f);
     DeleteFileA(path);
     for (char* p = line; *p; p++) if (*p == '\r' || *p == '\n') *p = 0;
-    if (strncmp(line, "probe", 5) == 0) {
+    if (strncmp(line, "probe", 5) == 0 && player) {
         Vec3 p = Pos(player); float sx, sy;
         WorldToScreen(p, sx, sy);
         Log("dev: probe player (%.1f %.1f %.1f) -> sx %.3f sy %.3f", p.x, p.y, p.z, sx, sy);
@@ -378,6 +379,39 @@ static void DevCommands(void* player) {
         int ev = (int)strtol(line + 3, nullptr, 16);
         Log("dev: event %#x", ev);
         HandleInputEvent(ev, 1); HandleInputEvent(ev, 0);
+        return;
+    }
+    if (strncmp(line, "panel", 5) == 0) {     // dump the top modal panel's controls
+        static void** gm = (void**)GetProcAddress(GetModuleHandleA(nullptr), "?g_pGuiMan@@3PEAVCGuiMan@@EA");
+        void* m = gm ? *gm : nullptr;
+        int n = m ? F<int>(m, 0x90) : 0;
+        void** arr = m ? F<void**>(m, 0x88) : nullptr;
+        Log("dev: %d modal panels, captured %p", n, m ? F<void*>(m, 0x58) : nullptr);
+        for (void* p : Gui_LivePanels()) Gui_Dump(p);
+        // other panels the GUI manager knows (list at +0x30 / count +0x38 if present)
+        for (size_t off = 0x10; m && off < 0x100; off += 0x10) {
+            void** a = F<void**>(m, off); int c = F<int>(m, off + 8);
+            if (!a || c <= 0 || c > 64 || !Readable(a, c * 8)) continue;
+            std::string names;
+            for (int i = 0; i < c; i++) { names += ClassName(a[i]); names += " "; }
+            Log("dev: gm+%#x [%d] %s", (int)off, c, names.c_str());
+        }
+        return;
+    }
+    if (strncmp(line, "levelup", 7) == 0) {   // ask the server to start a level-up
+        typedef void (*fn)();
+        ((fn)A(0x1406f5c20))();
+        Log("dev: level up requested");
+        return;
+    }
+    if (strncmp(line, "click ", 6) == 0) {    // click a control of the top modal panel by layout name
+        static void** gm = (void**)GetProcAddress(GetModuleHandleA(nullptr), "?g_pGuiMan@@3PEAVCGuiMan@@EA");
+        void* m = gm ? *gm : nullptr;
+        int n = m ? F<int>(m, 0x90) : 0;
+        void** arr = m ? F<void**>(m, 0x88) : nullptr;
+        const auto& lp = Gui_LivePanels();
+        for (int i = (int)lp.size() - 1; i >= 0; i--) { void* c = Gui_Find(lp[i], line + 6); if (c) { Gui_Click(c); break; } }
+        (void)arr; (void)n;
         return;
     }
     if (strncmp(line, "tda ", 4) == 0) {      // log one 2DA row: tda <resref> <row>
@@ -396,6 +430,7 @@ static void DevCommands(void* player) {
         Log("dev: journal %p done %d active %d", j, j ? F<int>(j, 8) : -1, j ? F<int>(j, 0x30) : -1);
         return;
     }
+    if (!player) return;
     if (strncmp(line, "use ", 4) == 0) {      // default action on the first object matching the name
         std::string want = line + 4;
         for (auto& c : want) c = (char)tolower((unsigned char)c);
@@ -442,6 +477,7 @@ void Control_PreInput(void* in) {
     g_ctl.inActionTargetMode = capType == TYPE_ACTIONTARGET;
 
     g_padGameplay = false;
+    DevCommands(player);
     if (Control_UIWantsInput()) { g_moving = false; g_aArmed = false; return; }
     if (!player) { g_moving = false; return; }
     g_padGameplay = g_pad.now - g_ctl.lastPadUse < 30.0;
@@ -514,7 +550,6 @@ void Control_PreInput(void* in) {
         uint32_t aid = ar ? F<uint32_t>(ar, OFS::Area_Id) : 0;
         if (aid != lastArea) { lastArea = aid; Log("area changed %08x", aid); }
     }
-    DevCommands(player);
     GatherCandidates(player, g_ctl.inActionTargetMode);
     UpdateSoftTarget(player);
     if (g_pad.Pressed(PB_RB)) CycleTarget(player, +1);
