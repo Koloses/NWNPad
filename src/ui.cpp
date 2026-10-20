@@ -12,6 +12,7 @@
 #include "quickbar.h"
 #include "loot.h"
 #include "party.h"
+#include "popup.h"
 #include "store.h"
 #include "game.h"
 #include "gamedata.h"
@@ -32,6 +33,7 @@ bool UI_PanelHandled(void* panel) {
     if (panel && panel == Dialog_Panel() && Dialog_Active()) return true;
     if (panel && panel == Loot_Panel() && Loot_Active()) return true;
     if (Store_PanelHandled(panel)) return true;
+    if (Popup_Handled(panel)) return true;
     return false;
 }
 
@@ -46,8 +48,10 @@ bool UI_PadPresent() {
 bool Control_UIWantsInput() {
     void* pl = G::Player();
     HUD_UpdatePanels(pl != nullptr && UI_PadPresent());
-    if (!g_pad.connected) { Cursor_SetMouseVisible(true); return false; }
+    if (!g_pad.connected) { Popup_Frame(); Cursor_SetMouseVisible(true); return false; }
     HubSystem_Update();
+    Popup_Frame();
+    if (Popup_Input()) { Cursor_Update(false); return true; }
     if (Dialog_Input()) { Cursor_Update(false); return true; }
     bool needCursor = Cursor_GameNeedsCursor(Dialog_Active());
     Cursor_Update(needCursor);
@@ -80,6 +84,7 @@ static void UI_Frame(HDC hdc) {
         if (loot) Loot_Draw();
         if (store) Store_Draw();
     }
+    if (g_pad.connected) Popup_Draw();
     if (g_pad.connected) Cursor_Draw();
     bool menus = Hub_Open() || Loot_Active() || Store_Active();
     if (pl && g_pad.connected && !Cursor_Active() && !Dialog_Active() && (!menus || g_ctl.radialOpen)) {
@@ -118,4 +123,5 @@ void UI_InstallHooks() {
     QB_InstallHooks();
     Cursor_InstallHooks();
     Describe_InstallHooks();
+    Popup_InstallHooks();
 }

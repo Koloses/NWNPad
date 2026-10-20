@@ -35,7 +35,11 @@ uint32_t g_pending = 0x7f000000;
 double g_pendingTime = -10;
 std::map<uint32_t, std::string> g_cache;
 
+}  // namespace
+void (*g_textSink)(void* gob, const char* s, bool reset) = nullptr;   // popup text capture
+namespace {
 void Add(void* gob, const char* s, bool reset, bool newline) {
+    if (g_textSink && s && !g_capturing) g_textSink(gob, s, reset || newline);
     if (!g_capturing || !s) return;
     Capture& c = g_cap[gob];
     if (reset) { c.parts.clear(); c.chars = 0; }
