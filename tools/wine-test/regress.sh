@@ -17,7 +17,7 @@ sleep 1; ./shot.sh /tmp/r_loot.png
 chk 1000 "take " 0.3 "A takes an item"
 chk 2000 "loot: closed" 0.3 "B closes the loot window"
 chk 10 "hub: open" 0.2 "Start opens the hub again"
-./tap.sh 200 0.25; sleep 0.4; ./tap.sh 200 0.25; sleep 0.6
+./tap.sh 200 0.3; sleep 1.2; ./tap.sh 200 0.3; sleep 1.2
 chk 1000 "quickbar edit" 0.3 "Quickbar tab: A opens the assign wheel"
 sleep 1; ./shot.sh /tmp/r_qb.png
 ./tap.sh 2000 0.3; sleep 1; ./tap.sh 10 0.3; sleep 1
