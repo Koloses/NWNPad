@@ -145,8 +145,19 @@ std::vector<Entry> Castable(const ClassInfo& c, int lvl) {
     return v;
 }
 
-// spells a prepared caster can put in a slot of this level
-std::vector<int> Preparable(const ClassInfo& c, int lvl) {
+// spells a prepared caster can put in a slot of this level: plain spells of the level, lower spells
+// with the character's metamagic feats (level + cost = slot level) and domain spells
+struct Pick { int id, meta; bool domain; };
+const struct { int bit, feat, cost; } META[] = {{1, 11, 2}, {2, 12, 1}, {4, 25, 3}, {8, 29, 4}, {16, 33, 1}, {32, 37, 1}};
+bool HasFeat(int feat) {
+    char* st = Stats();
+    if (!st) return false;
+    uint16_t* f = F<uint16_t*>(st, 0x118);
+    int n = F<int>(st, 0x120);
+    for (int i = 0; f && i < n && i < 2000; i++) if (f[i] == feat) return true;
+    return false;
+}
+std::vector<int> BaseSpells(const ClassInfo& c, int lvl) {
     std::vector<int> v = Known(c.idx, lvl);         // wizards: the spellbook
     if (v.empty()) {                                 // divine casters: every spell of the class at this level
         const TwoDA& t = TDA("spells");
@@ -157,6 +168,29 @@ std::vector<int> Preparable(const ClassInfo& c, int lvl) {
     }
     std::sort(v.begin(), v.end(), [](int a, int b) { return Spell(a).name < Spell(b).name; });
     v.erase(std::unique(v.begin(), v.end()), v.end());
+    return v;
+}
+std::vector<Pick> Preparable(const ClassInfo& c, int lvl) {
+    std::vector<Pick> v;
+    // domain spells first
+    char* ci = CI(c.idx);
+    if (ci && lvl >= 1) {
+        const TwoDA& d = TDA("domains");
+        char col[16]; snprintf(col, sizeof col, "Level_%d", lvl);
+        for (int k = 0; k < 2; k++) {
+            int dom = F<uint8_t>(ci, 0x14b + k);
+            int sp = dom == 0xff ? -1 : d.Int(dom, col, -1);
+            if (dom == 0xff) continue;
+            if (sp >= 0 && Spell(sp).ok) v.push_back({sp, 0, true});
+        }
+    }
+    for (int id : BaseSpells(c, lvl)) v.push_back({id, 0, false});
+    const TwoDA& t = TDA("spells");
+    for (auto& m : META) {
+        if (lvl - m.cost < 0 || !HasFeat(m.feat)) continue;
+        for (int id : BaseSpells(c, lvl - m.cost))
+            if (t.Int(id, "MetaMagic", 0) & m.bit) v.push_back({id, m.bit, false});
+    }
     return v;
 }
 
@@ -173,11 +207,11 @@ void Cast(uint64_t menuId) {
     ((fn)A(VA_QuickButton_ActionCastSpell))(fake);
 }
 
-void Memorize(int clsIdx, int spell, int slot) {
+void Memorize(int clsIdx, int spell, int slot, int domainLevel, int meta) {
     void* m = Inv::Message();
     if (!m) return;
     typedef void (*fn)(void*, uint8_t, uint32_t, uint8_t, uint8_t, uint8_t);
-    ((fn)A(VA_Msg_SpellMemorize))(m, (uint8_t)clsIdx, (uint32_t)spell, (uint8_t)slot, 0, 0);
+    ((fn)A(VA_Msg_SpellMemorize))(m, (uint8_t)clsIdx, (uint32_t)spell, (uint8_t)slot, (uint8_t)domainLevel, (uint8_t)meta);
 }
 
 void UnMemorize(int clsIdx, int lvl, int slot) {
@@ -213,6 +247,7 @@ struct State {
     uint64_t pendingMenu = 0;      // spell waiting for a quickbar slot / sub-spell choice
     bool subForQuickbar = false;
     std::vector<int> ovList;
+    std::vector<int> ovMeta; std::vector<char> ovDomain;   // prepare list: metamagic / domain per entry
     float descScroll = 0; int descFor = -1;
 } S;
 
@@ -252,6 +287,7 @@ void StartCast(const ClassInfo& c, const Entry& e) {
     const SpellInfo& si = Spell(e.id);
     if (!si.sub.empty()) {
         S.ov = OV_SUB; S.ovSel = 0; S.ovScroll = 0; S.ovList = si.sub; S.subForQuickbar = false;
+        S.ovMeta.assign(si.sub.size(), 0); S.ovDomain.assign(si.sub.size(), 0);
         S.pendingMenu = MenuId(e.id, e.level, c.idx, e.meta);
         return;
     }
@@ -306,8 +342,12 @@ void OverlayInput() {
         Hub_Close();
         Cast(m);
     } else if (S.ov == OV_PREPARE) {
-        Memorize(c->idx, pick, S.sel);
-        Log("spells: memorize %d in class %d level %d slot %d", pick, c->idx, S.lvl, S.sel);
+        int meta = S.ovMeta[S.ovSel];
+        bool dom = S.ovDomain[S.ovSel] != 0;
+        int base = S.lvl;
+        for (auto& m : META) if (meta == m.bit) base = S.lvl - m.cost;
+        Memorize(c->idx, pick, S.sel, dom ? base : 0, meta);
+        Log("spells: memorize %d meta %d domain %d in class %d level %d slot %d", pick, meta, dom, c->idx, S.lvl, S.sel);
         Hub_Toast("Prepared " + Spell(pick).name + " - rest to ready it");
         S.ov = OV_NONE;
         g_lastRead = -10;
@@ -339,13 +379,14 @@ void Input() {
     if (S.prepMode) {
         const Slot& s = slots[S.sel];
         if (g_pad.Pressed(PB_A)) {
-            if (s.domain) { Hub_Toast("Domain slots keep their domain spell"); return; }
-            S.ovList = Preparable(*c, S.lvl);
-            if (S.ovList.empty()) { Hub_Toast("No spells of this level to prepare"); return; }
+            std::vector<Pick> pk = Preparable(*c, S.lvl);
+            if (pk.empty()) { Hub_Toast("No spells of this level to prepare"); return; }
+            S.ovList.clear(); S.ovMeta.clear(); S.ovDomain.clear();
+            for (auto& p : pk) { S.ovList.push_back(p.id); S.ovMeta.push_back(p.meta); S.ovDomain.push_back(p.domain); }
             S.ov = OV_PREPARE; S.ovSel = 0; S.ovScroll = 0;
-            for (int i = 0; i < (int)S.ovList.size(); i++) if (S.ovList[i] == s.id) S.ovSel = i;
+            for (int i = 0; i < (int)pk.size(); i++) if (pk[i].id == s.id && pk[i].meta == s.meta && pk[i].domain == s.domain) S.ovSel = i;
         }
-        if (g_pad.Pressed(PB_X) && s.id >= 0 && !s.domain) {
+        if (g_pad.Pressed(PB_X) && s.id >= 0) {
             UnMemorize(c->idx, S.lvl, S.sel);
             Log("spells: clear class %d level %d slot %d", c->idx, S.lvl, S.sel);
             Hub_Toast("Slot cleared");
@@ -456,7 +497,14 @@ void DrawOverlay(float x, float y, float w, float h, float a) {
         bool sel = i == S.ovSel;
         UIK::RowSel(lx, ry + px(2), lw, rowH - px(4), sel);
         SpellIcon(S.ovList[i], lx + px(8), ry + px(6), rowH - px(12), a);
-        TextFit(FONT_BODY, px(21), lx + rowH + px(10), ry + px(12), lw - rowH - px(20), Spell(S.ovList[i]).name.c_str(), (sel ? Col(255, 244, 222) : Theme::Text).alpha(a));
+        std::string nm = Spell(S.ovList[i]).name;
+        std::string tag = i < (int)S.ovMeta.size() ? MetaName(S.ovMeta[i]) : std::string();
+        if (i < (int)S.ovDomain.size() && S.ovDomain[i]) tag = tag.empty() ? "Domain" : tag + ", domain";
+        if (tag.empty()) TextFit(FONT_BODY, px(21), lx + rowH + px(10), ry + px(12), lw - rowH - px(20), nm.c_str(), (sel ? Col(255, 244, 222) : Theme::Text).alpha(a));
+        else {
+            TextFit(FONT_BODY, px(20), lx + rowH + px(10), ry + px(4), lw - rowH - px(20), nm.c_str(), (sel ? Col(255, 244, 222) : Theme::Text).alpha(a));
+            Text(FONT_BODY, px(15), lx + rowH + px(10), ry + px(28), tag.c_str(), Theme::Gold.alpha(0.85f * a));
+        }
     }
     PopClip();
     UIK::Scrollbar(lx + lw - px(6), ly, lh, S.ovScroll, vis, n);

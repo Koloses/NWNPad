@@ -9,7 +9,8 @@ public:
     bool Load(const char* resref);                 // true if found
     bool ok() const { return !cols_.empty(); }
     int Rows() const { return (int)rows_.size(); }
-    int Col(const char* name) const;               // -1 if missing (case-insensitive)
+    int Col(const char* name) const;
+    const std::vector<std::string>& Cols() const { return cols_; }               // -1 if missing (case-insensitive)
     // "" for **** or out of range
     const std::string& Get(int row, int col) const;
     const std::string& Get(int row, const char* col) const { return Get(row, Col(col)); }

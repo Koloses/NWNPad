@@ -1,6 +1,7 @@
 // NWNPad - twin-stick gameplay controls
 #include "control.h"
 #include "hub_pages.h"
+#include "twoda.h"
 #include "game.h"
 #include "hooks.h"
 #include "pad.h"
@@ -377,6 +378,17 @@ static void DevCommands(void* player) {
         int ev = (int)strtol(line + 3, nullptr, 16);
         Log("dev: event %#x", ev);
         HandleInputEvent(ev, 1); HandleInputEvent(ev, 0);
+        return;
+    }
+    if (strncmp(line, "tda ", 4) == 0) {      // log one 2DA row: tda <resref> <row>
+        char name[32] = {}; int row = 0;
+        if (sscanf(line + 4, "%31s %d", name, &row) == 2) {
+            const TwoDA& t = TDA(name);
+            std::string out;
+            if (row < 0) { for (auto& c : t.Cols()) out += c + " "; Log("dev: %s cols = %s", name, out.c_str()); return; }
+            for (int c = 0; c < 64; c++) { const std::string& v = t.Get(row, c); out += (v.empty() ? std::string("*") : v) + " "; }
+            Log("dev: %s[%d] = %s", name, row, out.c_str());
+        }
         return;
     }
     if (strncmp(line, "journal", 7) == 0) {
