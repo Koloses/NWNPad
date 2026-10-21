@@ -525,6 +525,43 @@ static void DevCommands(void* player) {
         return;
     }
     if (!player) return;
+    if (strncmp(line, "gob", 3) == 0) {       // graphics objects referenced by the target (or the player) and their part tree
+        void* o = g_ctl.softTarget ? GetObj(g_ctl.softTarget) : player;
+        if (line[3] == ' ' && line[4] == 'm') o = player;
+        else if (line[3] == ' ') { void* x = GetObj((uint32_t)strtoul(line + 4, nullptr, 16)); if (x) o = x; }
+        Log("dev: gob of %08x %s", Id(o), ClassName(o));
+        for (size_t off = 8; off < 0x800; off += 8) {
+            void* p = F<void*>(o, off);
+            if (!p || ((uintptr_t)p & 7) || !Readable(p, 8)) continue;
+            const char* cn = ClassName(p);
+            if (!strstr(cn, "Gob") && !strstr(cn, "AurObject") && !strstr(cn, "Anim")) continue;
+            Log("dev: obj+%#x -> %p %s", (int)off, p, cn);
+            for (size_t o2 = 8; o2 < 0x600; o2 += 8) {
+                if (!Readable((char*)p + o2, 8)) break;
+                void* q = F<void*>(p, o2);
+                if (!q || ((uintptr_t)q & 7) || !Readable(q, 8)) continue;
+                const char* c2 = ClassName(q);
+                if (c2[0]) Log("dev:    +%#x -> %p %s", (int)o2, q, c2);
+            }
+        }
+        return;
+    }
+    if (strncmp(line, "parts ", 6) == 0) {    // part tree of a gob: parts <hex address>
+        void* g = (void*)strtoull(line + 6, nullptr, 16);
+        if (!g || !Readable(g, 0xa0)) return;
+        struct W { static void Walk(void* p, int d) {
+            if (!p || !Readable(p, 0x58) || d > 12) return;
+            void* node = F<void*>(p, 8);
+            const char* nm = node && Readable((char*)node + 0x38, 16) ? (const char*)node + 0x38 : "?";
+            float* pos = (float*)((char*)p + 0x10); float* q = (float*)((char*)p + 0x1c);
+            Log("dev: %*s%s %s pos %.2f %.2f %.2f q %.3f %.3f %.3f %.3f s %.2f", d * 2, "", nm, ClassName(p), pos[0], pos[1], pos[2], q[0], q[1], q[2], q[3], F<float>(p, 0x2c));
+            void** ch = F<void**>(p, 0x38); int n = F<int>(p, 0x40);
+            for (int i = 0; ch && i < n && i < 64; i++) Walk(ch[i], d + 1);
+        } };
+        Log("dev: gob %p %s root %p", g, ClassName(g), F<void*>(g, 0x90));
+        W::Walk(F<void*>(g, 0x90), 0);
+        return;
+    }
     if (strncmp(line, "hp", 2) == 0) {        // health of every creature in the area
         void* area = F<void*>(player, OFS::Obj_Area);
         int n = area ? F<int>(area, OFS::Area_ObjCount) : 0;
