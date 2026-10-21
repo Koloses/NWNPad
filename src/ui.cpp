@@ -100,6 +100,10 @@ static void UI_Frame(HDC hdc) {
         if (g_ctl.radialOpen) {
             HintItem h[] = {{GL_LS, "Choose"}, {GL_A, "Select"}, {GL_Y, "Back"}, {GL_B, "Close"}};
             UI_DrawHints(h, 4, 0.95f);
+        } else if (g_ctl.giveItem) {
+            char lbl[160]; snprintf(lbl, sizeof lbl, "Give %s", Control_GiveName());
+            HintItem h[] = {{GL_LS, "Pointer"}, {GL_A, lbl}, {GL_RB, "Next"}, {GL_B, "Cancel"}};
+            UI_DrawHints(h, 4, 0.95f);
         } else if (g_ctl.inActionTargetMode) {
             HintItem h[] = {{GL_LS, "Pointer"}, {GL_A, "Use on target"}, {GL_RB, "Next target"}, {GL_Y, "Self"}, {GL_B, "Cancel"}};
             UI_DrawHints(h, 5, 0.95f);

@@ -16,9 +16,12 @@ struct ControlState {
     bool pauseCursor = false;    // game paused: left stick moves a pointer over the world
     float curX = 0.5f, curY = 0.5f;   // pointer, normalized screen (y down)
     bool curGround = false;      // pointer is over walkable ground (no object)
+    uint32_t giveItem = 0;       // choosing who gets this item (pointer / targets)
 };
 extern ControlState g_ctl;
 void Control_ClickQuickSlot(int bank, int slot);
+void Control_StartGive(uint32_t item, const char* name);
+const char* Control_GiveName();
 void* Control_QuickButton(int bank, int slot);
 bool Control_UIWantsInput();     // implemented by UI layer
 void Control_SetMouse(int x, int y);

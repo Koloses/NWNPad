@@ -176,9 +176,9 @@ void MoveGrid(int dr, int dc) {
 }
 
 // ---- item actions ----------------------------------------------------------------------------
-enum ItemAct { IA_EQUIP, IA_USE, IA_SPLIT, IA_MERGE, IA_OPEN, IA_TOBAG, IA_DROP, IA_EXAMINE, IA_MORE };
+enum ItemAct { IA_EQUIP, IA_USE, IA_SPLIT, IA_MERGE, IA_OPEN, IA_TOBAG, IA_DROP, IA_EXAMINE, IA_MORE, IA_GIVE };
 const char* ActName(int a) {
-    static const char* N[] = {"Equip", "Use", "Split stack", "Combine stacks", "Open", "Put in a bag", "Drop", "Examine", "More actions"};
+    static const char* N[] = {"Equip", "Use", "Split stack", "Combine stacks", "Open", "Put in a bag", "Drop", "Examine", "More actions", "Give to ..."};
     return N[a];
 }
 const InvItem* FindPack(uint32_t id) {
@@ -203,6 +203,7 @@ void OpenActions(const InvItem& it) {
         if (it.stack > 1) HS.acts.push_back(IA_SPLIT);
         if (!SameStacks(it).empty()) HS.acts.push_back(IA_MERGE);
         if (!Inv::IsContainer(it)) for (auto& o : HS.pack) if (Inv::IsContainer(o)) { HS.acts.push_back(IA_TOBAG); break; }
+        HS.acts.push_back(IA_GIVE);
         HS.acts.push_back(IA_DROP);
     }
     HS.acts.push_back(IA_EXAMINE);
@@ -233,6 +234,7 @@ void DoAction(int a) {
         HS.bagSel = 0; HS.menu = HubState::M_BAGS; return;
     case IA_DROP: Inv::Drop(pl, c.id); Toast("Dropped " + c.name); break;
     case IA_EXAMINE: Inv::Examine(pl, c.id); break;
+    case IA_GIVE: Hub_Close(); Control_StartGive(c.id, c.name.c_str()); return;
     case IA_MORE: CenterMouse(); Inv::OpenRadial(c.id); break;
     }
     HS.lastGather = g_pad.now - 0.15;
@@ -407,6 +409,7 @@ void QuickbarInput() {
     if (g_pad.Repeat(PB_DUP) || g_pad.Repeat(PB_LUP)) HS.qbBank = (HS.qbBank + 2) % 3;
     if (g_pad.Repeat(PB_DDOWN) || g_pad.Repeat(PB_LDOWN)) HS.qbBank = (HS.qbBank + 1) % 3;
     if (g_pad.Pressed(PB_A)) QB_Edit(HS.qbBank, HS.qbSlot);
+    if (g_pad.Pressed(PB_BACK) && !QB_Empty(HS.qbBank, HS.qbSlot)) QB_Clear(HS.qbBank, HS.qbSlot);
     if (g_pad.Pressed(PB_X) && !QB_Empty(HS.qbBank, HS.qbSlot)) { Hub_Close(); Control_ClickQuickSlot(HS.qbBank, HS.qbSlot); }
     if (g_pad.Pressed(PB_Y)) { g_ctl.quickBank = HS.qbBank; Toast(std::string("Active set: ") + (HS.qbBank == 0 ? "I" : HS.qbBank == 1 ? "II" : "III")); }
     if (g_pad.Pressed(PB_B)) Hub_Close();
@@ -724,7 +727,8 @@ void DrawQuickbar(float x, float y, float w, float h, float a) {
     DrawBinding(HS.qbSlot, bx + ww + px(60), dy - px(2), px(26), a);
     dy += px(46);
     TextWrap(FONT_BODY, px(19), bx, dy, w - px(160),
-             "Assign opens the game's quickbar menu: choose spells, feats, skills, items or commands with the stick, A to pick. "
+             "Assign opens the game's quickbar menu: attack, special attacks, abilities, spells, party commands, actions and "
+             "emotes; choose with the stick, A to pick, Y back. "
              "In play, hold LT or RT to reach the extra slots and use the d-pad up/down to switch sets.",
              Theme::TextFaint.alpha(a));
 }
@@ -856,6 +860,7 @@ void Hub_Draw() {
         hints[n++] = {GL_A, "Assign"};
         hints[n++] = {GL_X, "Use"};
         hints[n++] = {GL_Y, "Make active"};
+        if (!QB_Empty(HS.qbBank, HS.qbSlot)) hints[n++] = {GL_BACK, "Clear"};
     }
     bool hasB = false;
     for (int i = 0; i < n; i++) if (hints[i].g == GL_B) hasB = true;

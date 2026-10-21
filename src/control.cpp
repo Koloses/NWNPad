@@ -1,5 +1,6 @@
 // NWNPad - twin-stick gameplay controls
 #include "control.h"
+#include "inv.h"
 #include "hub_pages.h"
 #include "twoda.h"
 #include "guiscan.h"
@@ -92,6 +93,8 @@ void* Control_QuickButton(int bank, int slot) {
     return (char*)qb + 0xf0 + (size_t)(bank * 12 + slot) * 0x2c8;
 }
 static double g_quickSlotTime = -10;
+static std::string g_giveName;
+static double g_giveStart = 0;
 void Control_ClickQuickSlot(int bank, int slot) {
     void* b = Control_QuickButton(bank, slot);
     if (!b) return;
@@ -123,6 +126,7 @@ static bool IsHostile(void* o) {
 static bool CreatureDead(void* o) {
     void* st = F<void*>(o, OFS::Cre_Stats);
     if (!st) return false;
+    if (F<uint8_t>(st, 0x8e) == 5) return true;          // damage level "dead" (all creatures)
     short mx = F<short>(st, OFS::Stats_MaxHP), cur = F<short>(st, OFS::Stats_CurHP);
     return mx > 0 && cur <= 0;
 }
@@ -145,6 +149,9 @@ static void GatherCandidates(void* player, bool includeSelf) {
         if (!F<int>(o, OFS::Obj_Selectable)) continue;
         uint32_t id = Id(o);
         if (id == pid && !includeSelf) continue;
+        // corpses get in the way in a fight: their loot is in a bag, or reachable with the pause pointer
+        if (t == OT_CREATURE && id != pid && !g_ctl.pauseCursor && CreatureDead(o)) continue;
+        if (g_ctl.giveItem && (t != OT_CREATURE || id == pid || CreatureDead(o))) continue;     // giving: the living only
         Vec3 p = Pos(o);
         float dx = p.x - pp.x, dy = p.y - pp.y, dz = p.z - pp.z;
         float d = sqrtf(dx * dx + dy * dy);
@@ -427,6 +434,45 @@ static void ActionTargetControl(void* player, void* at) {
     }
 }
 
+// ---- giving items ------------------------------------------------------------------------------
+void Control_StartGive(uint32_t item, const char* name) {
+    g_ctl.giveItem = item; g_giveName = name ? name : ""; g_giveStart = g_pad.now;
+    Log("give %08x: choose who", item);
+}
+const char* Control_GiveName() { return g_giveName.c_str(); }
+// as dragging the item onto a creature in the world: potions and healer's kits are used on your own
+// associates (they drink it), anything else opens a barter with the creature
+static void GiveTo(void* player, void* target, uint32_t itemId) {
+    void* it = Inv::ItemById(itemId);
+    if (!it || !target) return;
+    int base = F<int>(it, 0x40);
+    uint32_t tid = Id(target);
+    bool mine = F<int>(target, 0x274) != 0 && F<uint32_t>(target, 0x270) == Id(player);
+    if (mine && (base == 49 || base == 104)) {
+        float pos[3] = {0, 0, 0};
+        Log("give: %08x uses %08x", tid, itemId);
+        typedef void (*fn)(void*, uint32_t, uint32_t, uint32_t, float*);
+        ((fn)A(0x140804240))(player, itemId, 0u | (0xffu << 16), tid, pos);
+        return;
+    }
+    void* msg = Inv::Message();
+    if (!msg) return;
+    Log("give: barter with %08x offering %08x", tid, itemId);
+    typedef void (*fb)(void*, uint32_t, uint32_t);
+    ((fb)A(0x1407b8ef0))(msg, tid, itemId);
+}
+static void GiveControl(void* player) {
+    if (!Inv::ItemById(g_ctl.giveItem)) { g_ctl.giveItem = 0; return; }
+    if (g_pad.now - g_giveStart < 0.25) return;           // the press that chose "Give"
+    if (g_pad.Pressed(PB_B)) { Log("give cancelled"); g_ctl.giveItem = 0; return; }
+    if (g_pad.Pressed(PB_A)) {
+        void* t = g_ctl.softTarget ? GetObj(g_ctl.softTarget) : nullptr;
+        if (!t || Type(t) != OT_CREATURE || t == player || CreatureDead(t)) return;
+        GiveTo(player, t, g_ctl.giveItem);
+        g_ctl.giveItem = 0;
+    }
+}
+
 static void QuickSlots() {
     int bank = g_ctl.quickBank;
     bool lt = g_pad.Down(PB_LT), rt = g_pad.Down(PB_RT);
@@ -588,6 +634,17 @@ static void DevCommands(void* player) {
         }
         return;
     }
+    if (strncmp(line, "give ", 5) == 0) {      // give mode for the first backpack item matching the name
+        std::string want = line + 5; for (auto& c : want) c = (char)tolower((unsigned char)c);
+        std::vector<InvItem> pack; InvItem eq[ES_TOTAL];
+        Inv::Gather(player, pack, eq);
+        for (auto& it : pack) {
+            std::string l = it.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
+            if (l.find(want) != std::string::npos) { Control_StartGive(it.id, it.name.c_str()); g_giveStart = -10; return; }
+        }
+        Log("dev: give: nothing matching '%s' in %d items", want.c_str(), (int)pack.size());
+        return;
+    }
     if (strncmp(line, "loadsave ", 9) == 0) {
         void HubSystem_DevLoad(int); HubSystem_DevLoad(atoi(line + 9));
         return;
@@ -655,7 +712,7 @@ void Control_PreInput(void* in) {
     float rxv = fy, ryv = -fx;              // camera right vector
     g_moveMag = Len2(g_pad.lx, g_pad.ly);
     // paused, or a spell / item waiting for its target: the left stick moves a pointer over the world
-    bool paused = (GD::IsPaused() || g_ctl.inActionTargetMode) && !g_ctl.radialOpen;
+    bool paused = (GD::IsPaused() || g_ctl.inActionTargetMode || g_ctl.giveItem) && !g_ctl.radialOpen;
     if (paused && !g_ctl.pauseCursor) g_ctl.pauseCursor = true;
     if (!paused && g_ctl.pauseCursor && !g_ctl.radialOpen) { g_ctl.pauseCursor = false; g_ctl.locked = false; g_curWas = false; }
     if (g_ctl.pauseCursor) g_moveMag = 0.0f;
@@ -743,6 +800,9 @@ void Control_PreInput(void* in) {
         }
     }
     ApplyHilite();
+
+    // --- giving an item: A gives it to the creature under the pointer, B cancels
+    if (g_ctl.giveItem) { g_aArmed = false; GiveControl(player); return; }
 
     // --- action target mode (spell / item / feat waiting for a target)
     if (g_ctl.inActionTargetMode) { g_aArmed = false; ActionTargetControl(player, cap); return; }

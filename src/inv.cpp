@@ -9,6 +9,7 @@
 #include "twoda.h"
 #include <windows.h>
 #include <cstring>
+#include <set>
 #include <algorithm>
 
 using namespace G;
@@ -242,6 +243,10 @@ uint32_t OpenContainerId() {
     return F<uint32_t>(p, PI_ContainerId);
 }
 
+// gold taken from a container becomes coins at once on the server, but the client keeps the gold
+// item it was shown as: remember what was taken so it is not listed again
+static std::set<uint32_t> g_takenGold;
+
 void GatherContainer(void* cre, std::vector<InvItem>& out) {
     out.clear();
     if (!cre) return;
@@ -249,6 +254,7 @@ void GatherContainer(void* cre, std::vector<InvItem>& out) {
     ForEachItem([&](void* it) {
         if (F<int>(it, IT_InContainer) != 1) return;
         if (F<uint32_t>(it, IT_Possessor) != cid) return;
+        if (g_takenGold.count(F<uint32_t>(it, IT_Id))) return;
         InvItem ii;
         if (Fill(F<uint32_t>(it, IT_Id), ii)) out.push_back(ii);
     });
@@ -267,6 +273,7 @@ void TakeItem(uint32_t id) {
     void* m = Msg();
     if (!m) return;
     Log("take %08x", id);
+    if (void* it = ItemById(id)) if (F<int>(it, IT_BaseItem) == 76) g_takenGold.insert(id);
     typedef void (*fn)(void*, uint32_t, uint8_t, uint8_t, uint32_t);
     ((fn)A(VA_Msg_RepositoryMove))(m, id, 0xff, 0xff, 0x7f000000);
 }

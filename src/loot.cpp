@@ -41,6 +41,12 @@ void Refresh(bool force = false) {
     LS.lastGather = g_pad.now;
     Inv::GatherContainer(Player(), LS.items);
     int n = (int)LS.items.size();
+    static int lastN = -1; static uint32_t lastC = 0;
+    if (n != lastN || LS.container != lastC) {
+        lastN = n; lastC = LS.container;
+        std::string s; for (auto& it : LS.items) { char b[96]; snprintf(b, sizeof b, " %s(%d)", it.name.c_str(), it.baseItem); s += b; }
+        Log("loot: %d items:%s", n, s.c_str());
+    }
     if (LS.selId) for (int i = 0; i < n; i++) if (LS.items[i].id == LS.selId) { LS.sel = i; break; }
     if (LS.sel >= n) LS.sel = n - 1;
     if (LS.sel < 0) LS.sel = 0;

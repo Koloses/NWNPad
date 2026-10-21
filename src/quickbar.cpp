@@ -81,8 +81,21 @@ void QB_Edit(int bank, int slot) {
     int w, h; Control_GuiSize(w, h);
     Control_SetMouse(w / 2, h / 2);
     Log("quickbar edit bank %d slot %d", bank, slot);
+    // always the full "assign" menu (attack, special attacks, abilities, cast, commands, actions, emotes):
+    // a filled slot would show only its own options; the slot keeps its content if nothing is chosen
+    uint8_t type = F<uint8_t>(b, 0x140);
+    F<uint8_t>(b, 0x140) = 0;
     typedef void (*fn)(void*);
     ((fn)A(VA_QuickButton_HandleRightButton))(b);
+    if (F<uint8_t>(b, 0x140) == 0) F<uint8_t>(b, 0x140) = type;
+}
+
+void QB_Clear(int bank, int slot) {
+    void* b = Control_QuickButton(bank, slot);
+    if (!b) return;
+    Log("quickbar clear bank %d slot %d", bank, slot);
+    typedef void (*fn)(void*);
+    ((fn)A(0x14085e6c0))(b);              // CGuiQuickButton::RadialMenuItemClearSlot
 }
 
 void QB_Binding(int slot, int& mod, int& btn) {

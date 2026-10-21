@@ -68,6 +68,13 @@ on the creature / object under the pointer (or on the ground there), RB / LB cha
 Y targets yourself, B cancels. Used from a quick slot with a target selected, the item / spell goes
 straight to that target.
 
+**Giving items:** item menu > Give to ... : the left stick pointer (or RB / LB) picks a creature, A
+gives. As with dragging the item onto them: your henchmen / companions drink a potion or use a
+healer's kit right away, anyone else gets a barter offer.
+
+**Corpses** are no longer targeted (their loot is in the bag they drop); the pause pointer still
+reaches them.
+
 **Using items from the inventory:** Use (X > Use) drinks a potion straight away. Wands, scrolls,
 kits and other items with one power go to target mode; items with several powers open the
 game's item wheel.
@@ -85,8 +92,9 @@ LB / RB switch tabs: Inventory, Character, Quickbar, Spells, Journal, Map, Syste
 * **Character** - abilities, hit points, armour class, attack bonus, experience, gold.
   A opens the full character sheet, X levels up when available, Y rests.
 * **Quickbar** - all 36 slots with the button that triggers each one. A opens the game's
-  assign wheel for the slot (spells, feats, skills, items, commands), X uses the slot,
-  Y makes the set active.
+  full assign wheel for the slot, also on a filled slot (attack, special attacks, abilities, cast,
+  party commands, actions, emotes; the slot keeps its content if nothing is picked), X uses the
+  slot, Y makes the set active, Back clears it.
 * **Spells** - spells of each casting class by level (LT / RT or d-pad left / right change the
   level, Y the class). A casts (then pick the target as usual), X puts the spell on the
   quickbar (choose the slot, A places it). Prepared casters (wizard, cleric ...) press View to
