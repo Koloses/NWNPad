@@ -76,12 +76,32 @@ HP CreatureHP(void* cre) {
     h.temp = F<short>(st, OFS::Stats_TempHP);
     h.max = F<short>(st, OFS::Stats_MaxHP);
     h.known = h.max > 0;
+    void* pl = Player();
+    uint32_t pid = pl ? Id(pl) : 0;
+    h.exact = cre == pl || (pid && MasterId(cre) == pid);
+    h.level = F<uint8_t>(st, 0x8e);
+    if (h.level > 5) h.level = 0;
+    if (h.exact && h.known) {
+        h.frac = (float)h.cur / h.max;
+        if (h.frac < 0) h.frac = 0;
+        if (h.frac > 1) h.frac = 1;
+    } else {
+        static const float F_[6] = {1.0f, 0.85f, 0.62f, 0.37f, 0.15f, 0.0f};
+        h.frac = F_[h.level];
+        h.known = true;
+    }
     return h;
+}
+
+const char* DamageLevelName(int level) {
+    static const char* N[6] = {"Uninjured", "Barely injured", "Injured", "Heavily wounded", "Near death", "Dead"};
+    return level >= 0 && level < 6 ? N[level] : "";
 }
 
 bool IsDead(void* cre) {
     HP h = CreatureHP(cre);
-    return h.known && h.cur <= 0;
+    if (h.exact) return h.known && h.cur <= 0;
+    return h.level == 5;
 }
 
 int Reaction(void* cre) {
