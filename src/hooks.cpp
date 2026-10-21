@@ -79,7 +79,8 @@ bool Hooks_Install() {
             return false;
         }
     }
-    if (MH_Initialize() != MH_OK) { Log("MH_Initialize failed"); return false; }
+    MH_STATUS mh = MH_Initialize();
+    if (mh != MH_OK && mh != MH_ERROR_ALREADY_INITIALIZED) { Log("MH_Initialize failed"); return false; }
     o_ProcessInput = (decltype(o_ProcessInput))Hook_Create(G::VA::ProcessInput, (void*)hk_ProcessInput, "ProcessInput");
     o_UpdateDriveMode = (decltype(o_UpdateDriveMode))Hook_Create(G::VA::UpdateDriveMode, (void*)hk_UpdateDriveMode, "UpdateDriveMode");
     o_FHC_Hostile = (decltype(o_FHC_Hostile))Hook_Create(G::VA::FeedbackHitCheckHostile, (void*)hk_FHC_Hostile, "FeedbackHitCheckHostile");

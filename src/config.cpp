@@ -33,5 +33,6 @@ void Config_Load(const char* ini) {
     c.rumble = geti("Controls", "Rumble", 1, ini);
     GetPrivateProfileStringA("Developer", "InjectFile", "", c.injectFile, sizeof c.injectFile, ini);
     c.devDumpArea = geti("Developer", "DumpArea", 0, ini);
+    c.glDiag = geti("Developer", "GLDiag", 0, ini);
     Log("config: enabled=%d hud=%d dialog=%d menus=%d inject='%s'", c.enabled, c.newHud, c.newDialog, c.newMenus, c.injectFile);
 }

@@ -1,5 +1,6 @@
 // NWNPad UI core: overlay frame hook, input routing between screens
 #include "ui.h"
+#include "gldiag.h"
 #include "render.h"
 #include "uikit.h"
 #include "control.h"
@@ -106,7 +107,9 @@ static void UI_Frame(HDC hdc) {
 }
 
 static BOOL WINAPI hk_SwapBuffers(HDC hdc) {
+    GLDiag_PreOverlay();
     if (g_cfg.enabled) UI_Frame(hdc);
+    GLDiag_PostOverlay();
     return o_SwapBuffers(hdc);
 }
 

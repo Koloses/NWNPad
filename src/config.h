@@ -15,7 +15,8 @@ struct Config {
     int codepage = 0;          // 0 = auto (from game language)
     int hideCursorWithPad = 1;
     char injectFile[260] = ""; // developer: virtual pad input file
-    int devDumpArea = 0;       // developer: log area objects when the hub opens
+    int devDumpArea = 0;
+    int glDiag = 0;            // developer: OpenGL diagnostics and frame capture (gldiag.cpp)       // developer: log area objects when the hub opens
 };
 extern Config g_cfg;
 void Config_Load(const char* iniPath);

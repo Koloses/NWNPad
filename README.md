@@ -145,6 +145,14 @@ B goes back, the right stick scrolls lists.
 to fall back to the game's own panels, adjust dead zones, camera speed and inversion,
 target ranges, UI scale and rumble.
 
+## OpenGL diagnostics
+
+`[Developer] GLDiag=1` in `NWNPad.ini` writes `bin\win32\NWNPad-diag\NWNPad-gl.log` (GPU, driver, every
+shader compile / link with errors, driver warnings) and works even with `Enabled=0`. F11 (or both
+stick clicks held for a second) captures the next frame into `NWNPad-diag\capture-<time>`: screenshot,
+every draw call with its shader program, textures and uniform values, the shader sources and the
+textures as TGA files.
+
 ## Building
 
 Linux with mingw-w64 (`x86_64-w64-mingw32-g++`), Python 3 with `pefile`:
