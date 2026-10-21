@@ -140,7 +140,7 @@ void PortraitCircle(void* cre, float cx, float cy, float r, float hpRing, bool b
         ImageRounded(tex, cx - ir, cy - ir, 2 * ir, 2 * ir, ir, Col(), 0.0f, 0.04f, 1.0f, 0.54f);
     }
     // hp ring
-    float f = hp.known && hp.max > 0 ? fmaxf(0.0f, fminf(1.0f, (float)hp.cur / hp.max)) : 1.0f;
+    float f = hp.known ? hp.frac : 1.0f;
     Ring(cx, cy, r - hpRing * 0.5f, hpRing, Theme::HPBack);
     Col hc = f > 0.5f ? Lerp(Col(214, 170, 60), Theme::Friendly, (f - 0.5f) * 2) : Lerp(Theme::HP, Col(214, 170, 60), f * 2);
     if (f > 0.001f) Arc(cx, cy, r, hpRing, 0, 6.2831853f * f, hc);
@@ -230,7 +230,16 @@ static void DrawTarget(void* pl) {
     float by = y + px(48);
     if (Type(t) == OT_CREATURE) {
         GD::HP hp = GD::CreatureHP(t);
-        if (hp.known) UIK::Bar(x + px(24), by, w - px(48), px(10), (float)hp.cur / hp.max, rc.r > 200 && rc.g < 120 ? Theme::HP : Theme::Friendly, Theme::HPBack);
+        if (hp.known) {
+            float bw = w - px(48);
+            if (!hp.exact) {          // only the damage level is known: bar plus the game's wording
+                const char* dl = GD::DamageLevelName(hp.level);
+                float dw = TextWidth(FONT_BODY, px(16), dl) + px(14);
+                TextRight(FONT_BODY, px(16), x + w - px(24), by - px(6), dl, Theme::TextDim);
+                bw -= dw;
+            }
+            UIK::Bar(x + px(24), by, bw, px(10), hp.frac, rc.r > 200 && rc.g < 120 ? Theme::HP : Theme::Friendly, Theme::HPBack);
+        }
     }
     // action prompt
     const char* verb = g_ctl.inActionTargetMode ? "Use on target" : ActionVerb(t);
@@ -324,8 +333,22 @@ void HUD_Draw() {
     DrawFeed();
     if (g_cfg.minimap) { float ms = px(230); Map_DrawMinimap(W() - px(40) - ms, px(40), ms, 0.95f); }
     if (GD::IsPaused()) {
-        float w = px(260), h = px(56);
-        UIK::Panel((W() - w) * 0.5f, H() * 0.28f, w, h, px(28));
-        TextCentered(FONT_TITLE, px(30), W() * 0.5f, H() * 0.28f + px(10), "PAUSED", Theme::Gold);
+        float w = px(560), h = px(52);
+        float y = px(136);
+        UIK::Panel((W() - w) * 0.5f, y, w, h, px(26));
+        Text(FONT_TITLE, px(26), (W() - w) * 0.5f + px(26), y + px(11), "PAUSED", Theme::Gold);
+        float hx = (W() - w) * 0.5f + px(170);
+        hx += UIK::Hint(GL_LS, "Pointer", hx, y + px(12), px(28)) + px(22);
+        hx += UIK::Hint(GL_A, g_ctl.curGround ? "Walk here" : "Act", hx, y + px(12), px(28)) + px(22);
+        UIK::Hint(GL_DRIGHT, "Resume", hx, y + px(12), px(28));
+    }
+    if (g_ctl.pauseCursor && !g_ctl.radialOpen) {     // world pointer
+        float cx = g_ctl.curX * W(), cy = g_ctl.curY * H();
+        bool on = g_ctl.softTarget != 0;
+        Col c = on ? Theme::Gold : Col(240, 230, 210);
+        Ring(cx, cy, px(on ? 16 : 13), px(2.5f), Col(0, 0, 0, 150));
+        Ring(cx, cy, px(on ? 15 : 12), px(2), c);
+        Circle(cx, cy, px(3), c);
+        if (g_ctl.curGround) Ring(cx, cy, px(22), px(1.2f), c.alpha(0.45f));
     }
 }

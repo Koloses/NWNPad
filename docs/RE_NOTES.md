@@ -205,3 +205,11 @@ Hook ?Activate@CGuiModalPanel@@QEAAXXZ; classes CPanelOk, CPanelOkCancel, CPanel
 Buttons: exported OnOkButtonPressed / OnCancelButtonPressed / HandleYes/No/CancelButton.
 Game state icons over the portrait (level up 1, time stop 2, pause 4): CGuiInGame+0x370 bits;
 AddGameState 0x1406f3a40 (gig, mask), RemoveGameState 0x1406f7a80 (gig, mask).
+
+## Health of other creatures
+Exact HP (update flag 0x400 -> stats +0x84..0x8a) is sent only for creatures in the player's party
+(CNWSMessage::ComputeUpdateRequired); everyone gets the damage level (flag 0x800 -> stats +0x8e byte:
+0 >= 95%, 1 >= 75%, 2 >= 50%, 3 >= 25%, 4 alive, 5 dead; CNWSObject::GetDamageLevel). Non-party stats show 1/1.
+
+## Walking to a point
+CClientExoAppInternal::WalkPlayerToPoint 0x1406f0cc0 (internal, x, y, z, flags 0, target 0x7f000000, 0).

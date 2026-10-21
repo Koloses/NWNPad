@@ -31,6 +31,7 @@ const uintptr_t VA_CGuiMan_HandleKeyEvent = 0x1401f3630;
 const uintptr_t VA_CGuiMan_SetMousePosition = 0x1401f4c30;
 const uintptr_t VA_RButtonDown = 0x1406ee750;
 const uintptr_t VA_ActionTarget_LMouseDown = 0x14083a860;
+const uintptr_t VA_WalkPlayerToPoint = 0x1406f0cc0;   // (internal, x, y, z, flags, target id, ...)
 
 void** p_g_pGuiMan = nullptr;
 int* p_radialDepth = nullptr;
@@ -148,6 +149,7 @@ static void GatherCandidates(void* player, bool includeSelf) {
         if (fabsf(dz) > 4.0f) continue;
         bool hostile = IsHostile(o);
         float range = (t == OT_CREATURE) ? g_cfg.targetRange : g_cfg.interactRange + 2.0f;
+        if (g_ctl.pauseCursor) range = 45.0f;            // the pointer can reach anything on screen
         if (id != pid && d > range) continue;
         Cand c{};
         c.obj = o; c.id = id; c.type = t; c.dist = d; c.hostile = hostile;
@@ -273,6 +275,88 @@ static Vec3 GroundPointAhead(void* player, float dist) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// paused: a pointer over the world (left stick), like the mouse in the classic interface
+static Vec3 g_curWorld;
+static bool g_curWorldOk = false;
+
+// ground point under a screen position: solve WorldToScreen(p) = (sx, sy) on the hero's height plane
+static bool ScreenToGround(void* player, float tx, float ty, Vec3& out) {
+    Vec3 p = Pos(player);
+    for (int it = 0; it < 16; it++) {
+        float sx, sy;
+        if (!WorldToScreen(p, sx, sy)) return false;
+        float ex = tx - sx, ey = ty - sy;
+        if (ex * ex + ey * ey < 1e-7f) break;
+        const float h = 0.5f;
+        Vec3 px_ = p; px_.x += h; Vec3 py_ = p; py_.y += h;
+        float ax, ay, bx, by;
+        if (!WorldToScreen(px_, ax, ay) || !WorldToScreen(py_, bx, by)) return false;
+        float j11 = (ax - sx) / h, j21 = (ay - sy) / h, j12 = (bx - sx) / h, j22 = (by - sy) / h;
+        float det = j11 * j22 - j12 * j21;
+        if (fabsf(det) < 1e-9f) return false;
+        float dx = (j22 * ex - j12 * ey) / det, dy = (-j21 * ex + j11 * ey) / det;
+        float l = Len2(dx, dy);
+        if (l > 8.0f) { dx *= 8.0f / l; dy *= 8.0f / l; }
+        p.x += dx; p.y += dy;
+    }
+    Vec3 pp = Pos(player);
+    if (Len2(p.x - pp.x, p.y - pp.y) > 60.0f) return false;
+    out = p;
+    return true;
+}
+
+static bool g_curWas = false;
+static void PauseCursor(void* player) {
+    bool& was = g_curWas;
+    if (!was) {   // start at the hero
+        float sx, sy; Vec3 p = Pos(player); p.z += 1.0f;
+        if (WorldToScreen(p, sx, sy)) { g_ctl.curX = sx; g_ctl.curY = sy; }
+        else { g_ctl.curX = 0.5f; g_ctl.curY = 0.5f; }
+    }
+    was = true;
+    float m = Len2(g_pad.lx, g_pad.ly);
+    bool moved = false;
+    if (m > 0.0f) {
+        float sp = 0.75f * (0.25f + 0.75f * m) * (float)g_pad.dt;       // screen heights per second
+        float aspect = GuiH() > 0 ? (float)GuiW() / GuiH() : 1.6f;
+        g_ctl.curX += g_pad.lx / fmaxf(m, 1e-3f) * m * sp / aspect;
+        g_ctl.curY -= g_pad.ly / fmaxf(m, 1e-3f) * m * sp;
+        g_ctl.curX = fminf(fmaxf(g_ctl.curX, 0.01f), 0.99f);
+        g_ctl.curY = fminf(fmaxf(g_ctl.curY, 0.01f), 0.99f);
+        moved = true;
+    }
+    // object under the pointer (creatures by their chest, others by their base)
+    static uint32_t hover = 0;
+    if (moved || !hover) {
+        float bestD = 1e9f; uint32_t best = 0;
+        float W_ = (float)GuiW(), H_ = (float)GuiH();
+        for (auto& c : g_cands) {
+            if (c.id == Id(player)) continue;
+            Vec3 p = Pos(c.obj); p.z += c.type == OT_CREATURE ? 1.0f : 0.4f;
+            float sx, sy;
+            if (!WorldToScreen(p, sx, sy)) continue;
+            float dx = (sx - g_ctl.curX) * W_, dy = (sy - g_ctl.curY) * H_;
+            float d = sqrtf(dx * dx + dy * dy);
+            float r = (c.type == OT_CREATURE ? 0.075f : 0.05f) * H_;
+            if (d < r && d < bestD) { bestD = d; best = c.id; }
+        }
+        hover = best;
+        if (moved || best) { g_ctl.softTarget = best; g_ctl.locked = best != 0; g_lockTime = g_pad.now; }
+    }
+    g_curWorldOk = ScreenToGround(player, g_ctl.curX, g_ctl.curY, g_curWorld);
+    g_ctl.curGround = g_curWorldOk && !g_ctl.softTarget;
+}
+
+static bool WalkToPointer() {
+    void* in = Internal();
+    if (!in || !g_curWorldOk) return false;
+    Log("walk to (%.1f %.1f %.1f)", g_curWorld.x, g_curWorld.y, g_curWorld.z);
+    typedef int (*fn)(void*, float, float, float, int, uint32_t, int);
+    ((fn)A(VA_WalkPlayerToPoint))(in, g_curWorld.x, g_curWorld.y, g_curWorld.z, 0, 0x7f000000u, 0);
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------
 static int OctantKey(int o) {
     static const int k[8] = {0x36, 0x37, 0x34, 0x31, 0x30, 0x2f, 0x32, 0x35};
     return k[o & 7];
@@ -312,7 +396,7 @@ static void ActionTargetControl(void* player, void* at) {
     // choose target: soft target, or ground point ahead of the hero
     if (g_pad.Pressed(PB_A)) {
         void* obj = g_ctl.softTarget ? GetObj(g_ctl.softTarget) : nullptr;
-        Vec3 p = obj ? Pos(obj) : GroundPointAhead(player, 4.0f);
+        Vec3 p = obj ? Pos(obj) : (g_ctl.pauseCursor && g_curWorldOk) ? g_curWorld : GroundPointAhead(player, 4.0f);
         Log("action target confirm obj=%08x", obj ? Id(obj) : 0);
         WithHitOverride(obj, p, obj ? 2 : 1, [&] {
             typedef void (*fn)(void*);
@@ -441,6 +525,18 @@ static void DevCommands(void* player) {
         return;
     }
     if (!player) return;
+    if (strncmp(line, "hp", 2) == 0) {        // health of every creature in the area
+        void* area = F<void*>(player, OFS::Obj_Area);
+        int n = area ? F<int>(area, OFS::Area_ObjCount) : 0;
+        uint32_t* ids = area ? F<uint32_t*>(area, OFS::Area_ObjIds) : nullptr;
+        for (int i = 0; ids && i < n; i++) {
+            void* o = GetObj(ids[i]);
+            if (!o || Type(o) != OT_CREATURE) continue;
+            GD::HP h = GD::CreatureHP(o);
+            Log("dev: hp %08x '%s' exact %d %d/%d level %d frac %.2f", ids[i], GD::ObjName(ids[i]).c_str(), h.exact, h.cur, h.max, h.level, h.frac);
+        }
+        return;
+    }
     if (strncmp(line, "use ", 4) == 0) {      // default action on the first object matching the name
         std::string want = line + 4;
         for (auto& c : want) c = (char)tolower((unsigned char)c);
@@ -496,6 +592,10 @@ void Control_PreInput(void* in) {
     float fx, fy; CamForward(player, fx, fy);
     float rxv = fy, ryv = -fx;              // camera right vector
     g_moveMag = Len2(g_pad.lx, g_pad.ly);
+    bool paused = GD::IsPaused() && !g_ctl.radialOpen;
+    if (paused && !g_ctl.pauseCursor) g_ctl.pauseCursor = true;
+    if (!paused && g_ctl.pauseCursor && !g_ctl.radialOpen) { g_ctl.pauseCursor = false; g_ctl.locked = false; g_curWas = false; }
+    if (g_ctl.pauseCursor) g_moveMag = 0.0f;
     // after a radial menu or targeting the left stick is still pushed from choosing the entry:
     // ignore it until it returns to the centre, otherwise walking cancels the chosen action
     {
@@ -561,7 +661,8 @@ void Control_PreInput(void* in) {
         if (aid != lastArea) { lastArea = aid; Log("area changed %08x", aid); }
     }
     GatherCandidates(player, g_ctl.inActionTargetMode);
-    UpdateSoftTarget(player);
+    if (g_ctl.pauseCursor) PauseCursor(player);
+    else UpdateSoftTarget(player);
     if (g_pad.Pressed(PB_RB)) CycleTarget(player, +1);
     // LB: tap = previous target, hold + right stick = camera tilt
     {
@@ -571,6 +672,13 @@ void Control_PreInput(void* in) {
         if (g_pad.Released(PB_LB) && !lbTilt && !g_pad.Down(PB_RB)) CycleTarget(player, -1);
     }
     if (g_pad.Pressed(PB_RS)) { g_ctl.locked = false; }
+    if (g_ctl.pauseCursor && (g_pad.Pressed(PB_RB) || g_pad.Released(PB_LB)) && g_ctl.softTarget) {
+        if (void* o = GetObj(g_ctl.softTarget)) {   // the pointer follows the cycled target
+            Vec3 p = Pos(o); p.z += Type(o) == OT_CREATURE ? 1.0f : 0.4f;
+            float sx, sy;
+            if (WorldToScreen(p, sx, sy)) { g_ctl.curX = sx; g_ctl.curY = sy; }
+        }
+    }
     ApplyHilite();
 
     // --- action target mode (spell / item / feat waiting for a target)
@@ -590,6 +698,7 @@ void Control_PreInput(void* in) {
     if (g_pad.Released(PB_A) && g_aArmed && !g_aHeldForRadial && !g_pad.Down(PB_LT) && !g_pad.Down(PB_RT)) {
         void* t = g_ctl.softTarget ? GetObj(g_ctl.softTarget) : nullptr;
         if (t) { Log("default action on %08x type %d", Id(t), Type(t)); DefaultAction(t); }
+        else if (g_ctl.pauseCursor) WalkToPointer();
     }
     if (g_pad.Released(PB_A)) { g_aHeldForRadial = false; g_aArmed = false; }
 

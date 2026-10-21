@@ -46,6 +46,13 @@ The HUD has a minimap in the top-right corner (north up): explored area, your po
 facing, party (green), enemies (red), other people and map notes. Back opens the full map.
 
 The target is picked automatically from what is in front of the hero; enemies are preferred.
+The target frame shows exact health for your party; for everyone else the game only tells the
+client a damage level (uninjured ... near death), shown as the bar and its name.
+
+**While paused** (d-pad right) the left stick moves a pointer over the world, like the mouse:
+point at a creature or object and press A to act on it (hold A for its action wheel), or point
+at the ground and press A to walk there. RB / LB jump the pointer between targets. Spells and
+items that need a target use the pointer too. The orders run when you resume.
 
 **Action wheels:** point with either stick, A selects, Y goes back one level, B closes.
 

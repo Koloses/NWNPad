@@ -13,6 +13,9 @@ struct ControlState {
     bool padActive = false;      // pad used recently (vs mouse)
     int quickBank = 0;           // 0..2
     double lastPadUse = 0;
+    bool pauseCursor = false;    // game paused: left stick moves a pointer over the world
+    float curX = 0.5f, curY = 0.5f;   // pointer, normalized screen (y down)
+    bool curGround = false;      // pointer is over walkable ground (no object)
 };
 extern ControlState g_ctl;
 void Control_ClickQuickSlot(int bank, int slot);
