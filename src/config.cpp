@@ -15,6 +15,7 @@ void Config_Load(const char* ini) {
     c.enabled = geti("General", "Enabled", 1, ini);
     c.newHud = geti("Interface", "GamepadHUD", 1, ini);
     c.minimap = geti("Interface", "Minimap", 1, ini);
+    c.questMarker = geti("Interface", "QuestMarker", 1, ini);
     c.newDialog = geti("Interface", "GamepadDialogue", 1, ini);
     c.newMenus = geti("Interface", "GamepadMenus", 1, ini);
     c.uiScale = getf("Interface", "Scale", 0.0f, ini);

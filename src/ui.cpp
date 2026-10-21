@@ -1,5 +1,6 @@
 // NWNPad UI core: overlay frame hook, input routing between screens
 #include "ui.h"
+#include "questmark.h"
 #include "gldiag.h"
 #include "render.h"
 #include "uikit.h"
@@ -127,6 +128,7 @@ void UI_Init(const char*) {
     Loot_Init();
     Store_Init();
     CharPanel_Init();
+    Quest_Init();
 }
 
 void UI_InstallHooks() {

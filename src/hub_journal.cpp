@@ -7,6 +7,8 @@
 #include "pad.h"
 #include "log.h"
 #include "inv.h"
+#include "questmark.h"
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -19,12 +21,13 @@ namespace {
 // CNWCSortedJournalArrayList: entries* +0, count +8, sorted index array +0x10
 // SJournalEntry (0x50): name loc +0, text loc +0x10, day +0x20, time +0x24, tag +0x28,
 //   priority +0x38, state +0x3c, picture +0x40, completed +0x44, displayed +0x48, updated +0x4c
-struct Quest { std::string name, text; int day = 0, time = 0; bool completed = false, updated = false; };
+struct Quest { std::string name, text, tag; int day = 0, time = 0; bool completed = false, updated = false; };
 
 std::vector<Quest> g_q[2];      // 0 active, 1 completed
 int g_list = 0, g_sel[2] = {0, 0}, g_scroll[2] = {0, 0};
 float g_textScroll = 0; int g_textFor = -1;
 double g_lastRead = -10;
+std::string Lower(std::string s) { for (auto& c : s) c = (char)tolower((unsigned char)c); return s; }
 
 void ReadList(void* lst, std::vector<Quest>& out) {
     out.clear();
@@ -44,6 +47,7 @@ void ReadList(void* lst, std::vector<Quest>& out) {
         q.day = F<int>(e, 0x20); q.time = F<int>(e, 0x24);
         q.completed = F<int>(e, 0x44) != 0;
         q.updated = F<int>(e, 0x4c) != 0;
+        if (const char* t = F<const char*>(e, 0x28)) { uint32_t l = F<uint32_t>(e, 0x30); if (l > 0 && l < 64) q.tag.assign(t, l); }
         if (q.name.empty()) q.name = "(untitled)";
         out.push_back(q);
     }
@@ -96,7 +100,11 @@ void Input() {
         if (g_pad.Repeat(PB_LT)) s = s - 8 < 0 ? 0 : s - 8;
         if (g_pad.Repeat(PB_RT)) s = s + 8 >= n ? n - 1 : s + 8;
     }
-    if (g_pad.Pressed(PB_X) || g_pad.Pressed(PB_DLEFT) || g_pad.Pressed(PB_DRIGHT)) { g_list ^= 1; g_textFor = -1; }
+    if (g_pad.Pressed(PB_DLEFT) || g_pad.Pressed(PB_DRIGHT)) { g_list ^= 1; g_textFor = -1; }
+    if (g_pad.Pressed(PB_X) && g_list == 0 && !g_q[0].empty()) {          // show this quest on the minimap
+        const Quest& q = g_q[0][std::min(g_sel[0], (int)g_q[0].size() - 1)];
+        Quest_Track(Lower(q.tag) == Quest_Tracked() ? std::string() : q.tag);
+    }
     if (fabsf(g_pad.ry) > 0.2f) g_textScroll -= g_pad.ry * px(700.0f) * (float)g_pad.dt;
     if (g_pad.Pressed(PB_A)) g_textScroll = 0;
     if (g_pad.Pressed(PB_B)) Hub_Close();
@@ -137,6 +145,11 @@ void Draw(float x, float y, float w, float h, float a) {
         UIK::RowSel(lx + px(4), ry + px(3), lw - px(8), rowH - px(6), sel);
         float tx = lx + px(30);
         if (v[i].updated && g_list == 0) Circle(lx + px(17), ry + rowH * 0.5f, px(4), Theme::Gold.alpha(a));
+        if (g_list == 0 && !v[i].tag.empty() && Lower(v[i].tag) == Quest_Tracked()) {        // on the minimap
+            float mx = lx + px(17), my = ry + rowH * 0.5f, r = px(5.5f);
+            Triangle(mx, my - r * 1.3f, mx + r, my, mx, my + r * 1.3f, Theme::Gold.alpha(a));
+            Triangle(mx, my - r * 1.3f, mx - r, my, mx, my + r * 1.3f, Theme::Gold.alpha(a));
+        }
         TextFit(FONT_BODY, px(23), tx, ry + (rowH - LineHeight(FONT_BODY, px(23))) * 0.5f, lw - px(50), v[i].name.c_str(),
                 (sel ? Col(255, 244, 222) : g_list == 1 ? Theme::TextDim : Theme::Text).alpha(a));
     }
@@ -181,7 +194,8 @@ void Draw(float x, float y, float w, float h, float a) {
 int Hints(HintItem* o) {
     int n = 0;
     o[n++] = {GL_DPAD, "Choose"};
-    o[n++] = {GL_X, g_list == 0 ? "Completed" : "Active"};
+    o[n++] = {GL_DLEFT, g_list == 0 ? "Completed" : "Active"};
+    if (g_list == 0) o[n++] = {GL_X, "Show on minimap"};
     o[n++] = {GL_RS, "Scroll"};
     return n;
 }

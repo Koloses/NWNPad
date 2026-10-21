@@ -1,5 +1,7 @@
 // NWNPad - hub "Map" page: explored tiles of the current area, hero / party markers and map notes
 #include "hub_pages.h"
+#include "config.h"
+#include "questmark.h"
 #include "hub.h"
 #include "render.h"
 #include "game.h"
@@ -269,6 +271,31 @@ void Map_DrawMinimap(float x, float y, float size, float a) {
         Circle(cx, cy, px(5), Col(10, 8, 6, (int)(230 * a)));
         Circle(cx, cy, px(3.5f), (party ? Theme::Friendly : Theme::Hostile).alpha(a));
     }
+    // quest marker: the target, or the exit towards it; outside the map an arrow on the rim
+    Vec3 qp; bool qhere = false;
+    bool quest = g_cfg.questMarker && Quest_Marker(qp, qhere);
+    if (quest) {
+        float qx = ox + qp.x * sc, qy = oy - qp.y * sc;
+        float cx = x + size * 0.5f, cy = y + size * 0.5f, half = size * 0.5f - px(14);
+        float dx = qx - cx, dy = qy - cy;
+        float m = fmaxf(fabsf(dx), fabsf(dy));
+        Col qc = qhere ? Col(255, 168, 40) : Col(90, 200, 255);
+        float pulse = 0.75f + 0.25f * sinf((float)g_pad.now * 4.0f);
+        if (m <= half) {
+            float r = px(7);
+            Triangle(qx, qy - r * 1.3f, qx + r, qy, qx, qy + r * 1.3f, Col(20, 14, 6, (int)(240 * a)));
+            Triangle(qx, qy - r * 1.3f, qx - r, qy, qx, qy + r * 1.3f, Col(20, 14, 6, (int)(240 * a)));
+            r = px(5);
+            Triangle(qx, qy - r * 1.3f, qx + r, qy, qx, qy + r * 1.3f, qc.alpha(a * pulse));
+            Triangle(qx, qy - r * 1.3f, qx - r, qy, qx, qy + r * 1.3f, qc.alpha(a * pulse));
+        } else {
+            float k = half / m;
+            float ax = cx + dx * k, ay = cy + dy * k;
+            float ang = atan2f(dx, -dy);
+            Arrow(ax, ay, px(11), ang, Col(20, 14, 6, (int)(255 * a)));
+            Arrow(ax, ay, px(8), ang, qc.alpha(a * pulse));
+        }
+    }
     // hero + camera view direction
     float hx = x + size * 0.5f, hy = y + size * 0.5f;
     Vec3 o = F<Vec3>(pl, OFS::Obj_Orient);
@@ -281,6 +308,18 @@ void Map_DrawMinimap(float x, float y, float size, float a) {
     Circle(nx, y, px(11), Col(20, 16, 12, (int)(240 * a)));
     Ring(nx, y, px(11), px(1.2f), Theme::Line.alpha(a));
     TextCentered(FONT_TITLE, px(14), nx, y - px(8), "N", Theme::Gold.alpha(a));
+    // tracked quest under the map
+    float below = 0;
+    if (quest) {
+        std::string qn = Quest_Name();
+        if (!qn.empty()) {
+            float fs = px(16);
+            Col qc2 = (qhere ? Col(255, 188, 90) : Col(150, 215, 255)).alpha(a);
+            if (TextWidth(FONT_BODY, fs, qn.c_str()) > size) TextFit(FONT_BODY, fs, x, y + size + px(30), size, qn.c_str(), qc2);
+            else TextCentered(FONT_BODY, fs, x + size * 0.5f, y + size + px(30), qn.c_str(), qc2);
+        }
+    }
+    (void)below;
     // area name under the map
     std::string name = F<char*>(ar, 0x238) ? G2UClean(F<char*>(ar, 0x238), F<int>(ar, 0x240)) : std::string();
     if (!name.empty()) {

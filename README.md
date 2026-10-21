@@ -72,6 +72,14 @@ straight to that target.
 gives. As with dragging the item onto them: your henchmen / companions drink a potion or use a
 healer's kit right away, anyone else gets a barter offer.
 
+**Quest marker (single player):** the minimap points at who moves your quest on: an orange marker
+(or an arrow on the rim) for someone in this area, a blue one for the door / transition towards the
+area they are in; the quest's name is under the map. It follows the quest updated last; X on the
+hub Journal page shows a different one (X again: back to automatic). The game has no quest markers:
+the mod looks through the module's conversations for lines that set a later journal entry of an
+active quest, so a script-only step (killing something, picking up an item) has no marker.
+`QuestMarker=0` in `[Interface]` turns it off.
+
 **Corpses** are no longer targeted (their loot is in the bag they drop); the pause pointer still
 reaches them.
 
