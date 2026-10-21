@@ -91,12 +91,14 @@ void* Control_QuickButton(int bank, int slot) {
     void* qb = F<void*>(gig, 0x60); if (!qb) return nullptr;
     return (char*)qb + 0xf0 + (size_t)(bank * 12 + slot) * 0x2c8;
 }
+static double g_quickSlotTime = -10;
 void Control_ClickQuickSlot(int bank, int slot) {
     void* b = Control_QuickButton(bank, slot);
     if (!b) return;
     Log("quickslot bank %d slot %d", bank, slot);
     typedef void (*fn)(void*);
     ((fn)A(VA_QuickButton_HandleLeftButton))(b);
+    g_quickSlotTime = g_pad.now;      // a target mode that starts now goes to the current target
 }
 
 // camera forward direction on the ground plane
@@ -393,6 +395,18 @@ static void RadialControl(void* radial) {
 }
 
 static void ActionTargetControl(void* player, void* at) {
+    // used from a quick slot with a target selected: straight at that target
+    if (g_pad.now - g_quickSlotTime < 0.6 && g_ctl.softTarget && g_ctl.softTarget != Id(player)) {
+        g_quickSlotTime = -10;
+        if (void* obj = GetObj(g_ctl.softTarget)) {
+            Log("quick slot on current target %08x", Id(obj));
+            WithHitOverride(obj, Pos(obj), 2, [&] {
+                typedef void (*fn)(void*);
+                ((fn)A(VA_ActionTarget_LMouseDown))(at);
+            });
+            return;
+        }
+    }
     // choose target: soft target, or ground point ahead of the hero
     if (g_pad.Pressed(PB_A)) {
         void* obj = g_ctl.softTarget ? GetObj(g_ctl.softTarget) : nullptr;
@@ -578,12 +592,14 @@ static void DevCommands(void* player) {
         void HubSystem_DevLoad(int); HubSystem_DevLoad(atoi(line + 9));
         return;
     }
-    if (strncmp(line, "item ", 5) == 0) {
-        std::string want = line + 5; for (auto& c : want) c = (char)tolower((unsigned char)c);
-        void Hub_DevUse(const char*); Hub_DevUse(want.c_str());
+    if (strncmp(line, "item ", 5) == 0 || strncmp(line, "equip ", 6) == 0) {
+        bool eq = line[0] == 'e';
+        std::string want = line + (eq ? 6 : 5); for (auto& c : want) c = (char)tolower((unsigned char)c);
+        void Hub_DevUse(const char*, bool); Hub_DevUse(want.c_str(), eq);
         return;
     }
-    if (strncmp(line, "use ", 4) == 0) {      // default action on the first object matching the name
+    if (strncmp(line, "use ", 4) == 0) {      // default action on the first object matching the name (or a hex id)
+        if (void* byId = GetObj((uint32_t)strtoul(line + 4, nullptr, 16))) { Log("dev: use %08x", Id(byId)); DefaultAction(byId); return; }
         std::string want = line + 4;
         for (auto& c : want) c = (char)tolower((unsigned char)c);
         void* area = F<void*>(player, OFS::Obj_Area);

@@ -65,7 +65,8 @@ Character > X starts it.
 
 **Spells and items that need a target:** the left stick moves a pointer over the world; A uses it
 on the creature / object under the pointer (or on the ground there), RB / LB change the target,
-Y targets yourself, B cancels.
+Y targets yourself, B cancels. Used from a quick slot with a target selected, the item / spell goes
+straight to that target.
 
 **Using items from the inventory:** Use (X > Use) drinks a potion straight away. Wands, scrolls,
 kits and other items with one power go to target mode; items with several powers open the

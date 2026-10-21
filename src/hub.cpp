@@ -863,8 +863,8 @@ void Hub_Draw() {
     UI_DrawHints(hints, n, a);
 }
 
-// developer: open the hub and run "Use" on the first backpack item whose name contains the text
-void Hub_DevUse(const char* want) {
+// developer: open the hub and run "Use" (or Equip) on the first backpack item whose name contains the text
+void Hub_DevUse(const char* want, bool equip) {
     void* pl = Player();
     if (!pl) return;
     std::vector<InvItem> pack; InvItem eq[ES_TOTAL];
@@ -873,8 +873,9 @@ void Hub_DevUse(const char* want) {
         std::string l = it.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
         if (l.find(want) == std::string::npos) continue;
         if (!HS.open) Hub_Toggle();
-        Log("dev: hub use %08x '%s'", it.id, it.name.c_str());
-        if (!Inv::UseItem(pl, it.id)) { CenterMouse(); Inv::OpenRadial(it.id); }
+        Log("dev: hub %s %08x '%s'", equip ? "equip" : "use", it.id, it.name.c_str());
+        if (equip) Inv::Equip(pl, it, -1);
+        else if (!Inv::UseItem(pl, it.id)) { CenterMouse(); Inv::OpenRadial(it.id); }
         return;
     }
     Log("dev: no item matching '%s'", want);
