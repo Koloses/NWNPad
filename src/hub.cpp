@@ -218,7 +218,7 @@ void DoAction(int a) {
     InvItem c = *it;
     switch (a) {
     case IA_EQUIP: Inv::Equip(pl, c, -1); Toast("Equipped " + c.name); break;
-    case IA_USE: CenterMouse(); Inv::OpenRadial(c.id); break;
+    case IA_USE: if (!Inv::UseItem(pl, c.id)) { CenterMouse(); Inv::OpenRadial(c.id); } break;
     case IA_SPLIT:
         HS.splitMax = c.stack - 1; HS.splitN = std::max(1, c.stack / 2);
         HS.menu = HubState::M_SPLIT; return;
@@ -862,3 +862,21 @@ void Hub_Draw() {
     if (!hasB) hints[n++] = {GL_B, HS.filterSlot >= 0 ? "Back" : "Close"};
     UI_DrawHints(hints, n, a);
 }
+
+// developer: open the hub and run "Use" on the first backpack item whose name contains the text
+void Hub_DevUse(const char* want) {
+    void* pl = Player();
+    if (!pl) return;
+    std::vector<InvItem> pack; InvItem eq[ES_TOTAL];
+    Inv::Gather(pl, pack, eq);
+    for (auto& it : pack) {
+        std::string l = it.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
+        if (l.find(want) == std::string::npos) continue;
+        if (!HS.open) Hub_Toggle();
+        Log("dev: hub use %08x '%s'", it.id, it.name.c_str());
+        if (!Inv::UseItem(pl, it.id)) { CenterMouse(); Inv::OpenRadial(it.id); }
+        return;
+    }
+    Log("dev: no item matching '%s'", want);
+}
+

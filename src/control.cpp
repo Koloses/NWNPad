@@ -574,6 +574,15 @@ static void DevCommands(void* player) {
         }
         return;
     }
+    if (strncmp(line, "loadsave ", 9) == 0) {
+        void HubSystem_DevLoad(int); HubSystem_DevLoad(atoi(line + 9));
+        return;
+    }
+    if (strncmp(line, "item ", 5) == 0) {
+        std::string want = line + 5; for (auto& c : want) c = (char)tolower((unsigned char)c);
+        void Hub_DevUse(const char*); Hub_DevUse(want.c_str());
+        return;
+    }
     if (strncmp(line, "use ", 4) == 0) {      // default action on the first object matching the name
         std::string want = line + 4;
         for (auto& c : want) c = (char)tolower((unsigned char)c);
@@ -629,7 +638,8 @@ void Control_PreInput(void* in) {
     float fx, fy; CamForward(player, fx, fy);
     float rxv = fy, ryv = -fx;              // camera right vector
     g_moveMag = Len2(g_pad.lx, g_pad.ly);
-    bool paused = GD::IsPaused() && !g_ctl.radialOpen;
+    // paused, or a spell / item waiting for its target: the left stick moves a pointer over the world
+    bool paused = (GD::IsPaused() || g_ctl.inActionTargetMode) && !g_ctl.radialOpen;
     if (paused && !g_ctl.pauseCursor) g_ctl.pauseCursor = true;
     if (!paused && g_ctl.pauseCursor && !g_ctl.radialOpen) { g_ctl.pauseCursor = false; g_ctl.locked = false; g_curWas = false; }
     if (g_ctl.pauseCursor) g_moveMag = 0.0f;

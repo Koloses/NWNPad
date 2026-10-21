@@ -63,9 +63,13 @@ B or left stick click closes.
 **Level up:** when enough experience is gathered the HUD shows "Level up ready"; Start >
 Character > X starts it.
 
-**Spells and items that need a target:** A uses it on the highlighted target (or on the ground
-ahead of the hero when nothing is highlighted), RB / LB change the target, Y targets yourself,
-B cancels.
+**Spells and items that need a target:** the left stick moves a pointer over the world; A uses it
+on the creature / object under the pointer (or on the ground there), RB / LB change the target,
+Y targets yourself, B cancels.
+
+**Using items from the inventory:** Use (X > Use) drinks a potion straight away. Wands, scrolls,
+kits and other items with one power go to target mode; items with several powers open the
+game's item wheel.
 
 ### Hub (Start)
 

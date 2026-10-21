@@ -406,3 +406,11 @@ void HubSystem_Update() {
         if (Player()) Hub_ShowTab("System");
     }
 }
+
+// developer: load the save with this number
+void HubSystem_DevLoad(int number) {
+    ReadSaves();
+    for (int i = 0; i < (int)g_saves.size(); i++) if (g_saves[i].number == number) { LoadFrom(i); return; }
+    Log("dev: no save #%d", number);
+}
+

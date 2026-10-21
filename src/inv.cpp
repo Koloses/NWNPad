@@ -359,6 +359,34 @@ void Drop(void* cre, uint32_t id) {
     ((fn)A(VA_PerformDropItem))(cre, id);
 }
 
+// "Use" without the radial menu: potions are drunk straight away, other items with one usable property
+// (wands, scrolls, kits, rods) start the game's item target mode, as clicking the property in the radial does
+int ActiveProperties(void* item) { return item && Readable((char*)item + 0x1f4, 12) ? F<int>(item, 0x1f4) : 0; }
+bool UseItem(void* cre, uint32_t id) {
+    void* it = ItemById(id);
+    if (!cre || !it) return false;
+    int n = ActiveProperties(it);
+    if (n != 1) { Log("use %08x: %d usable properties, radial", id, n); return false; }
+    int base = F<int>(it, 0x40);
+    if (base == 49) {                // potion: always on the drinker
+        float pos[3] = {0, 0, 0};
+        Log("drink %08x", id);
+        typedef void (*fn)(void*, uint32_t, uint32_t, uint32_t, float*);
+        ((fn)A(0x140804240))(cre, id, 0u | (0xffu << 16), Id(cre), pos);
+        return true;
+    }
+    typedef void* (*fnew)(size_t);
+    typedef void* (*fctor)(void*);
+    typedef void (*fact)(void*, uint32_t, uint64_t, char*);
+    void* t = ((fnew)A(0x140c0e364))(0x168);
+    if (!t) return false;
+    t = ((fctor)A(0x140700e60))(t);
+    char resref[32] = {};
+    Log("use %08x: item target mode", id);
+    ((fact)A(0x140701060))(t, id, 0, resref);
+    return true;
+}
+
 void OpenRadial(uint32_t id) {
     void* it = ItemById(id);
     if (!it) return;

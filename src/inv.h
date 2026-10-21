@@ -46,6 +46,7 @@ void Drop(void* creature, uint32_t itemId);
 void SetGuiOpen(void* creature, bool open);
 // same for the character sheet (server then sends experience etc.)
 void SetCharSheetOpen(void* creature, bool open);
+bool UseItem(void* creature, uint32_t id);   // false: use the radial menu instead
 void OpenRadial(uint32_t itemId);
 void Split(uint32_t itemId, int count);                     // new stack of `count` split off
 void Merge(uint32_t intoId, uint32_t fromId);               // combine two stacks of the same item
