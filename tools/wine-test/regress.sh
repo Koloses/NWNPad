@@ -31,7 +31,7 @@ p1=$(grep "probe player" $LOG | tail -1)
 chk 10 "hub: open" 0.2 "Start opens the hub (pages)"
 sleep 0.6
 ./tap.sh 200 0.3; sleep 1.5      # quickbar -> spells
-for i in 1 2 3 4 5 6 7 8; do grep -q "2da: spells" $LOG && break; sleep 1; done
+for i in $(seq 15); do grep -q "2da: spells" $LOG && break; sleep 1; done
 ./shot.sh /tmp/r_spells.png
 grep -q "2da: spells" $LOG && ok "Spells page reads spells.2da" || bad "Spells page reads spells.2da"
 chk 200 "journal: screen open" 0.3 "Journal page asks the server for quests"

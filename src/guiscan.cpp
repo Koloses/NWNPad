@@ -5,6 +5,7 @@
 #include "hooks.h"
 #include "text.h"
 #include "log.h"
+#include "dialog.h"
 #include <windows.h>
 #include <map>
 #include <vector>
@@ -32,6 +33,7 @@ void hk_PActivate(void* p) {
     o_PActivate(p);
     for (size_t i = 0; i < g_live.size(); i++) if (g_live[i] == p) { g_live.erase(g_live.begin() + i); break; }
     g_live.push_back(p);
+    Dialog_OnPanelActivated(p);
 }
 void hk_PDeactivate(void* p, int code) {
     for (size_t i = 0; i < g_live.size(); i++) if (g_live[i] == p) { g_live.erase(g_live.begin() + i); break; }
