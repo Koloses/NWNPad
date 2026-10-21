@@ -72,7 +72,9 @@ bool Control_UIWantsInput() {
     return false;
 }
 
+void Gui_EnforceHidden();
 static void UI_Frame(HDC hdc) {
+    Gui_EnforceHidden();
     HWND wnd = WindowFromDC(hdc);
     RECT rc; if (!wnd || !GetClientRect(wnd, &rc)) return;
     int w = rc.right - rc.left, h = rc.bottom - rc.top;
@@ -90,8 +92,8 @@ static void UI_Frame(HDC hdc) {
         if (loot) Loot_Draw();
         if (store) Store_Draw();
     }
-    if (g_pad.connected) CharPanel_Draw();
-    if (g_pad.connected) Popup_Draw();
+    if (UI_PadPresent()) CharPanel_Draw();
+    if (UI_PadPresent()) Popup_Draw();
     if (g_pad.connected) Cursor_Draw();
     bool menus = Hub_Open() || Loot_Active() || Store_Active();
     if (pl && g_pad.connected && !Cursor_Active() && !Dialog_Active() && (!menus || g_ctl.radialOpen)) {
@@ -99,8 +101,8 @@ static void UI_Frame(HDC hdc) {
             HintItem h[] = {{GL_LS, "Choose"}, {GL_A, "Select"}, {GL_Y, "Back"}, {GL_B, "Close"}};
             UI_DrawHints(h, 4, 0.95f);
         } else if (g_ctl.inActionTargetMode) {
-            HintItem h[] = {{GL_A, "Use on target"}, {GL_RB, "Next target"}, {GL_Y, "Self"}, {GL_B, "Cancel"}};
-            UI_DrawHints(h, 4, 0.95f);
+            HintItem h[] = {{GL_LS, "Pointer"}, {GL_A, "Use on target"}, {GL_RB, "Next target"}, {GL_Y, "Self"}, {GL_B, "Cancel"}};
+            UI_DrawHints(h, 5, 0.95f);
         }
     }
     R::End();

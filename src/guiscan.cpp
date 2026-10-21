@@ -6,6 +6,10 @@
 #include "text.h"
 #include "log.h"
 #include "dialog.h"
+#include "charpanel.h"
+#include "popup.h"
+#include "loot.h"
+#include "store.h"
 #include <windows.h>
 #include <map>
 #include <vector>
@@ -29,11 +33,28 @@ typedef void (*PDeactivate_t)(void*, int);
 PActivate_t o_PActivate = nullptr;
 PDeactivate_t o_PDeactivate = nullptr;
 std::vector<void*> g_live;      // activated panels, newest last
+typedef void (*PanelFn)(void*);
+PanelFn fHide = nullptr, o_UnHide = nullptr;
+
+// panels the pad UI draws itself must never reach the screen, not even for the single frame between the
+// game showing them and our per-frame update hiding them again (that frame reads as a flash / blink)
+bool KeepHidden(void* p) {
+    return Dialog_KeepHidden(p) || CharPanel_KeepHidden(p) || Popup_KeepHidden(p) || Loot_KeepHidden(p) ||
+           Store_KeepHidden(p);
+}
+void hk_UnHide(void* p) {
+    if (p && KeepHidden(p)) {
+        static void* last = nullptr;
+        if (p != last) { Log("kept %s hidden", ClassName(p)); last = p; }
+        return;
+    }
+    o_UnHide(p);
+}
 void hk_PActivate(void* p) {
     o_PActivate(p);
+    if (p && KeepHidden(p)) Gui_HidePanel(p);
     for (size_t i = 0; i < g_live.size(); i++) if (g_live[i] == p) { g_live.erase(g_live.begin() + i); break; }
     g_live.push_back(p);
-    Dialog_OnPanelActivated(p);
 }
 void hk_PDeactivate(void* p, int code) {
     for (size_t i = 0; i < g_live.size(); i++) if (g_live[i] == p) { g_live.erase(g_live.begin() + i); break; }
@@ -61,6 +82,25 @@ void Gui_InstallHooks() {
     o_Import = (Import_t)Hook_Create(VA_ImportLayoutData, (void*)hk_Import, "CGuiObject::ImportLayoutData");
     o_PActivate = (PActivate_t)Hook_Create(0x1401fa230, (void*)hk_PActivate, "CGuiPanel::Activate");
     o_PDeactivate = (PDeactivate_t)Hook_Create(0x1401fa830, (void*)hk_PDeactivate, "CGuiPanel::Deactivate");
+    fHide = (PanelFn)GetProcAddress(exe, "?Hide@CGuiPanel@@QEAAXXZ");
+    void* uh = (void*)GetProcAddress(exe, "?UnHide@CGuiPanel@@QEAAXXZ");
+    if (uh) o_UnHide = (PanelFn)Hook_Create((uintptr_t)uh - (uintptr_t)exe + 0x140000000ull, (void*)hk_UnHide, "CGuiPanel::UnHide");
+}
+
+// the game may show a panel again through paths other than UnHide: hide it again before the next frame
+void Gui_EnforceHidden() {
+    static void* last = nullptr;
+    for (void* p : g_live) {
+        if (!Readable(p, 0xc0) || (F<uint32_t>(p, 0xb0) & 2) != 0 || !KeepHidden(p)) continue;
+        if (p != last) { Log("hid %s again", ClassName(p)); last = p; }
+        Gui_HidePanel(p);
+    }
+}
+void Gui_HidePanel(void* p) {
+    if (p && fHide && (F<uint32_t>(p, 0xb0) & 2) == 0) fHide(p);
+}
+void Gui_ShowPanel(void* p) {         // straight to the game, past the keep-hidden check
+    if (p && o_UnHide && (F<uint32_t>(p, 0xb0) & 2) != 0) o_UnHide(p);
 }
 
 void Gui_Forget(void* panel) { g_panels.erase(panel); }

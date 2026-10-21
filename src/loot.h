@@ -5,3 +5,4 @@ bool Loot_Active();
 bool Loot_Input();
 void Loot_Draw();
 void* Loot_Panel();
+bool Loot_KeepHidden(void* panel);

@@ -4,4 +4,4 @@ bool Dialog_Active();
 bool Dialog_Input();
 void Dialog_Draw();
 void* Dialog_Panel();
-void Dialog_OnPanelActivated(void* panel);
+bool Dialog_KeepHidden(void* panel);

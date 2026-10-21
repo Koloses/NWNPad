@@ -1,5 +1,6 @@
 // NWNPad - gamepad conversation window (replaces the game's dialogue panel)
 #include "dialog.h"
+#include "guiscan.h"
 #include "uikit.h"
 #include "game.h"
 #include "gamedata.h"
@@ -25,7 +26,7 @@ const uintptr_t VA_HandleDialogSelection = 0x1406f5850;
 void (*o_ShowDialogEntry)(void* gig, void* text, uint32_t p3, uint32_t speaker) = nullptr;
 void (*o_ShowDialogReplies)(void* gig, int n, void* strs, uint32_t* ids, int p4, uint32_t p5, int p6) = nullptr;
 typedef void (*PanelFn)(void*);
-PanelFn fHide = nullptr, fUnHide = nullptr;
+PanelFn fHide = nullptr;
 
 struct State {
     bool active = false;
@@ -47,17 +48,6 @@ void HidePanel() {
     if (p && fHide && (F<uint32_t>(p, 0xb0) & 2) == 0) fHide(p);
 }
 
-// the classic conversation panel must never reach the screen while the pad window is up, not even for a
-// frame (a one-frame flash of it reads as the screen blinking): keep it hidden when the game shows it again
-PanelFn o_UnHide = nullptr;
-void hk_UnHide(void* p) {
-    if (p && p == DlgPanel() && g_cfg.newDialog && UI_PadPresent()) {
-        static double last = -10;
-        if (g_pad.now - last > 2.0) { Log("dialog: game tried to show its panel, kept hidden"); last = g_pad.now; }
-        return;
-    }
-    o_UnHide(p);
-}
 
 void hk_ShowDialogEntry(void* gig, void* text, uint32_t p3, uint32_t speaker) {
     DS.text = ExoStr(text);
@@ -97,17 +87,11 @@ void Dialog_InstallHooks() {
     o_ShowDialogEntry = (decltype(o_ShowDialogEntry))Hook_Create(VA_ShowDialogEntry, (void*)hk_ShowDialogEntry, "ShowDialogEntry");
     o_ShowDialogReplies = (decltype(o_ShowDialogReplies))Hook_Create(VA_ShowDialogReplies, (void*)hk_ShowDialogReplies, "ShowDialogReplies");
     fHide = (PanelFn)GetProcAddress(GetModuleHandleA(nullptr), "?Hide@CGuiPanel@@QEAAXXZ");
-    fUnHide = (PanelFn)GetProcAddress(GetModuleHandleA(nullptr), "?UnHide@CGuiPanel@@QEAAXXZ");
-    if (fUnHide) {
-        uintptr_t va = (uintptr_t)fUnHide - (uintptr_t)GetModuleHandleA(nullptr) + 0x140000000ull;
-        o_UnHide = (PanelFn)Hook_Create(va, (void*)hk_UnHide, "CGuiPanel::UnHide");
-        if (o_UnHide) fUnHide = o_UnHide;      // our own unhide (pad gone) goes straight to the game
-    }
 }
 
-void Dialog_OnPanelActivated(void* p) {     // CGuiPanel::Activate hook (guiscan)
-    if (p && p == DlgPanel()) HidePanel();
-}
+// the classic conversation panel never reaches the screen while the pad window is up
+bool Dialog_KeepHidden(void* p) { return p && p == DlgPanel() && g_cfg.newDialog && UI_PadPresent(); }
+
 
 bool Dialog_Active() {
     if (!g_cfg.newDialog) return false;
@@ -121,7 +105,7 @@ bool Dialog_Active() {
     if (DS.active && !UI_PadPresent()) {
         // pad gone: give the conversation back to the game's own panel
         void* p = DlgPanel();
-        if (p && fUnHide && (F<uint32_t>(p, 0xb0) & 2) != 0) fUnHide(p);
+        Gui_ShowPanel(p);
         return false;
     }
     return DS.active;

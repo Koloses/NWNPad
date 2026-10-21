@@ -1,5 +1,6 @@
 // NWNPad - gamepad loot window for containers (chests, corpses, bags); replaces the game's container view
 #include "loot.h"
+#include "guiscan.h"
 #include "inv.h"
 #include "hub.h"
 #include "uikit.h"
@@ -46,10 +47,7 @@ void Refresh(bool force = false) {
 }
 
 void UnHidePanel() {
-    typedef void (*fn)(void*);
-    static fn fUnHide = (fn)GetProcAddress(GetModuleHandleA(nullptr), "?UnHide@CGuiPanel@@QEAAXXZ");
-    void* p = Inv::InventoryPanel();
-    if (p && fUnHide && (F<uint32_t>(p, 0xb0) & 2) != 0) fUnHide(p);
+    Gui_ShowPanel(Inv::InventoryPanel());
 }
 
 void HidePanel() {
@@ -88,6 +86,10 @@ bool Loot_Active() {
 }
 
 void* Loot_Panel() { return Inv::InventoryPanel(); }
+bool Loot_KeepHidden(void* p) {
+    if (!p || p != Inv::InventoryPanel() || !g_cfg.newMenus || !Player() || !UI_PadPresent()) return false;
+    return LS.active || Inv::OpenContainerId() != 0x7f000000;
+}
 
 bool Loot_Input() {
     if (!Loot_Active()) return false;

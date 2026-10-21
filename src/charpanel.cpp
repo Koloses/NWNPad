@@ -3,6 +3,7 @@
 // layout names recorded by guiscan and driven through the controls' own callbacks.
 #include "charpanel.h"
 #include "guiscan.h"
+#include "ui.h"
 #include "uikit.h"
 #include "render.h"
 #include "game.h"
@@ -116,6 +117,8 @@ int g_cursor[4] = {0, 0, 0, 0};   // our cursor per list
 int g_menuSel = 0;
 float g_descScroll = 0; std::string g_descKey;
 double g_openTime = 0;
+double g_fadeStart = -10;         // fade-in only when the pad window appears, not between creation steps
+double g_lastShown = -10;
 bool g_waitRelease = false;      // buttons held when a panel opened belong to the previous one
 
 bool Handled(const char* cn) {
@@ -388,21 +391,33 @@ void CharPanel_Init() {
 }
 
 bool CharPanel_Handled(void* panel) { return panel && panel == g_panel; }
+bool CharPanel_KeepHidden(void* p) {
+    if (!p || !UI_PadPresent() || p == g_classic || !Readable(p, 0xc0)) return false;
+    const char* cn = ClassName(p);
+    return cn && Handled(cn);
+}
 bool CharPanel_Active() { return g_panel != nullptr; }
 
 void CharPanel_Frame() {
-    void* p = g_pad.connected ? CurrentPanel() : nullptr;
+    static bool wasConnected = false;
+    if (wasConnected && !UI_PadPresent()) {       // pad gone: give every character panel back to the mouse
+        for (void* q : Gui_LivePanels())
+            if (Readable(q, 0xc0) && Handled(ClassName(q))) Gui_ShowPanel(q);
+    }
+    wasConnected = UI_PadPresent();
+    void* p = UI_PadPresent() ? CurrentPanel() : nullptr;
     if (g_hidden && g_hidden != p) {
         // panel changed or pad gone: show the previous one again if it is still alive
         bool alive = false;
         for (void* q : Gui_LivePanels()) if (q == g_hidden) alive = true;
-        if (alive && fUnHide && (F<uint32_t>(g_hidden, 0xb0) & 2)) fUnHide(g_hidden);
+        if (alive && !CharPanel_KeepHidden(g_hidden)) Gui_ShowPanel(g_hidden);
         g_hidden = nullptr;
     }
     if (p != g_panel) {
         g_panel = p;
         g_focus = 0; g_cursor[0] = g_cursor[1] = g_cursor[2] = g_cursor[3] = 0; g_menuSel = 0;
         g_openTime = g_pad.now;
+        if (p && g_pad.now - g_lastShown > 0.3) g_fadeStart = g_pad.now;
         g_waitRelease = true;
         if (p) {
             Log("charpanel: %s", ClassName(p)); Build(p);
@@ -412,8 +427,9 @@ void CharPanel_Frame() {
         }
     }
     if (!p) return;
+    g_lastShown = g_pad.now;
     Build(p);
-    if (fHide && (F<uint32_t>(p, 0xb0) & 2) == 0) { fHide(p); g_hidden = p; }
+    Gui_HidePanel(p); g_hidden = p;
 }
 
 bool CharPanel_Input() {
@@ -558,11 +574,21 @@ void DrawList(List& l, int li, float x, float y, float w, float h, float a) {
 }  // namespace
 
 void CharPanel_Draw() {
-    if (!g_panel) return;
+    static int lastShade = 0;
+    if (!g_panel) {
+        // the game swaps panels between steps: keep the backdrop for a moment so nothing blinks through
+        double gone = g_pad.now - g_lastShown;
+        if (gone < 0.25 && lastShade) {
+            float k = (float)fmax(0.0, 1.0 - gone / 0.25);
+            R::Rect(0, 0, (float)W(), (float)H(), Col(0, 0, 0, (int)(lastShade * k)));
+        }
+        return;
+    }
     Model& m = g_m;
-    float t = (float)fmin(1.0, (g_pad.now - g_openTime) / 0.16);
+    float t = (float)fmin(1.0, (g_pad.now - g_fadeStart) / 0.16);
     float a = 1 - (1 - t) * (1 - t);
-    R::Rect(0, 0, (float)W(), (float)H(), Col(0, 0, 0, (int)((m.menu || !Player() ? 235 : 140) * a)));
+    lastShade = (int)((m.menu || !Player() ? 235 : 140) * a);
+    R::Rect(0, 0, (float)W(), (float)H(), Col(0, 0, 0, lastShade));
     float w = fminf(px(1600), W() - px(60));
     float h = fminf(px(880), H() - px(150));
     float x = (W() - w) * 0.5f, y = (H() - h) * 0.5f - px(30);

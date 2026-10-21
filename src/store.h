@@ -5,3 +5,4 @@ bool Store_Active();
 bool Store_Input();
 void Store_Draw();
 bool Store_PanelHandled(void* panel);
+bool Store_KeepHidden(void* panel);

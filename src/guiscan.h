@@ -13,6 +13,8 @@ std::string Gui_Text(void* obj);                              // text of a label
 bool Gui_Click(void* control);                                // run the control's click callback
 bool Gui_Enabled(void* obj);
 void Gui_Forget(void* panel);
+void Gui_HidePanel(void* panel);
+void Gui_ShowPanel(void* panel);                              // unhide, bypassing the pad UI's keep-hidden check
 void Gui_Dump(void* panel);
 const std::vector<void*>& Gui_LivePanels();                  // activated (not yet deactivated) panels, newest last
 std::vector<std::string> Gui_Texts(void* obj, size_t maxOff = 0x500);   // all texts referenced by the object

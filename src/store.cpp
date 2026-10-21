@@ -1,5 +1,6 @@
 // NWNPad - gamepad merchant window (replaces the game's store + inventory panels while trading)
 #include "store.h"
+#include "guiscan.h"
 #include "inv.h"
 #include "hub.h"
 #include "uikit.h"
@@ -178,11 +179,8 @@ bool Store_Active() {
     if (!g_cfg.newMenus || !Player() || !UI_PadPresent()) {
         if (SS.active) {
             SS.active = false;
-            typedef void (*fn)(void*);
-            static fn fUnHide = (fn)GetProcAddress(GetModuleHandleA(nullptr), "?UnHide@CGuiPanel@@QEAAXXZ");
-            void* sp = StorePanel(); void* ip = Inv::InventoryPanel();
-            if (fUnHide && sp && (F<uint32_t>(sp, 0xb0) & 2)) fUnHide(sp);
-            if (fUnHide && ip && (F<uint32_t>(ip, 0xb0) & 2)) fUnHide(ip);
+            Gui_ShowPanel(StorePanel());
+            Gui_ShowPanel(Inv::InventoryPanel());
             SS.store = nullptr;
         }
         return false;
@@ -214,6 +212,13 @@ bool Store_Active() {
     }
     if (on) SS.store = st;
     return SS.active;
+}
+
+bool Store_KeepHidden(void* p) {
+    if (!p || !g_cfg.newMenus || !Player() || !UI_PadPresent()) return false;
+    void* st = WorldStore();
+    if (!st || F<int>(st, ST_Open) == 0 || !F<void*>(st, ST_Panel)) return false;
+    return p == F<void*>(st, ST_Panel) || p == Inv::InventoryPanel();
 }
 
 bool Store_PanelHandled(void* panel) {

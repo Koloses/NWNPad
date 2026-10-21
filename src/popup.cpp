@@ -2,6 +2,8 @@
 // CPanelYesNoCancel) shown as gamepad dialogs: the texts the panel sets on activation are captured,
 // the buttons are pressed through the panel's own handlers.
 #include "popup.h"
+#include "guiscan.h"
+#include "ui.h"
 #include "uikit.h"
 #include "render.h"
 #include "game.h"
@@ -63,6 +65,7 @@ void hk_Activate(void* panel) {
     g_pending = panel;
     g_texts.clear();
     g_textSink = Sink;
+    if (UI_PadPresent()) Gui_HidePanel(panel);
 }
 
 void* GuiMan() {
@@ -150,9 +153,8 @@ void Popup_InstallHooks() {
 
 void Popup_Frame() {
     if (g_pending) Finish();
-    if (!g_pad.connected && g_pop.panel && IsModal(g_pop.panel)) {        // mouse user: give the panel back
-        static PanelFn fUnHide = (PanelFn)GetProcAddress(GetModuleHandleA(nullptr), "?UnHide@CGuiPanel@@QEAAXXZ");
-        if (fUnHide && (F<uint32_t>(g_pop.panel, 0xb0) & 2)) fUnHide(g_pop.panel);
+    if (!UI_PadPresent() && g_pop.panel && IsModal(g_pop.panel)) {        // mouse user: give the panel back
+        Gui_ShowPanel(g_pop.panel);
         g_pop = Pop();
     }
     if (g_pop.panel && !IsModal(g_pop.panel)) g_pop = Pop();     // closed by the game
@@ -160,6 +162,7 @@ void Popup_Frame() {
 
 bool Popup_Active() { return g_pop.panel != nullptr && IsTop(g_pop.panel); }
 bool Popup_Handled(void* panel) { return panel && panel == g_pop.panel; }
+bool Popup_KeepHidden(void* p) { return p && UI_PadPresent() && (p == g_pop.panel || p == g_pending); }
 
 bool Popup_Input() {
     if (!Popup_Active()) return false;
