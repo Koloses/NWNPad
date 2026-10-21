@@ -9,6 +9,9 @@ gets a gamepad cursor that jumps between controls.
 
 Everything was built from a decompilation of the game executable; no game files are changed.
 
+NWNPad is only the gamepad and interface mod; it does not change how the game renders. To run the game's
+OpenGL on Vulkan instead, see the separate NWNZink package.
+
 ## Install
 
 1. Copy `version.dll` and `NWNPad.ini` into `Neverwinter Nights - Enhanced Edition\bin\win32`

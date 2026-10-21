@@ -27,6 +27,7 @@
 #include "res.h"
 #include "MinHook.h"
 #include <windows.h>
+#include <GL/gl.h>
 
 static BOOL(WINAPI* o_SwapBuffers)(HDC) = nullptr;
 
@@ -74,6 +75,7 @@ bool Control_UIWantsInput() {
 }
 
 void Gui_EnforceHidden();
+
 static void UI_Frame(HDC hdc) {
     Gui_EnforceHidden();
     HWND wnd = WindowFromDC(hdc);
@@ -143,4 +145,13 @@ void UI_InstallHooks() {
     Describe_InstallHooks();
     Popup_InstallHooks();
     Gui_InstallHooks();
+}
+
+// one line of what the pad UI shows (diagnostics)
+std::string Hub_DebugState();
+std::string UI_DebugState() {
+    char b[256];
+    snprintf(b, sizeof b, "hub %s, dialog %d, charpanel %d, popup %d, held %04x", Hub_DebugState().c_str(), (int)Dialog_Active(),
+             (int)CharPanel_Active(), (int)Popup_Active(), (unsigned)g_pad.held);
+    return b;
 }

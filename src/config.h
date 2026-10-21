@@ -2,8 +2,8 @@
 struct Config {
     int enabled = 1;
     int newHud = 1;            // replace the game's HUD with the gamepad HUD
-    int minimap = 1;
-    int questMarker = 1;       // quest marker on the minimap (single player)           // minimap in the top-right corner of the gamepad HUD
+    int minimap = 1;           // minimap in the top-right corner of the gamepad HUD
+    int questMarker = 1;       // quest marker on the minimap (single player)
     int newDialog = 1;         // gamepad dialogue window
     int newMenus = 1;          // gamepad hub (inventory, character, journal...)
     float deadzoneL = 0.24f, deadzoneR = 0.20f;
@@ -16,8 +16,8 @@ struct Config {
     int codepage = 0;          // 0 = auto (from game language)
     int hideCursorWithPad = 1;
     char injectFile[260] = ""; // developer: virtual pad input file
-    int devDumpArea = 0;
-    int glDiag = 0;            // developer: OpenGL diagnostics and frame capture (gldiag.cpp)       // developer: log area objects when the hub opens
+    int devDumpArea = 0;       // developer: log area objects when the hub opens
+    int glDiag = 0;            // developer: OpenGL diagnostics and frame capture (gldiag.cpp)
 };
 extern Config g_cfg;
 void Config_Load(const char* iniPath);

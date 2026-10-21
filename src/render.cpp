@@ -107,6 +107,10 @@ static bool InitGL() {
     if (!ok) { Log("GL: program link failed"); return false; }
     g_uScreen = pglGetUniformLocation(g_prog, "uScreen");
     g_uTex = pglGetUniformLocation(g_prog, "uTex");
+    // the game caches its GL bindings: leave the vertex array and array buffer as they were
+    GLint prevVao = 0, prevBuf = 0;
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prevVao);
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &prevBuf);
     pglGenBuffers(1, &g_vbo);
     pglGenVertexArrays(1, &g_vao);
     pglBindVertexArray(g_vao);
@@ -117,7 +121,8 @@ static bool InitGL() {
     pglEnableVertexAttribArray(3); pglVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(V), (void*)offsetof(V, lx));
     pglEnableVertexAttribArray(4); pglVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(V), (void*)offsetof(V, rad));
     pglEnableVertexAttribArray(5); pglVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(V), (void*)offsetof(V, mode));
-    pglBindVertexArray(0);
+    pglBindVertexArray(prevVao);
+    pglBindBuffer(GL_ARRAY_BUFFER, prevBuf);
     uint32_t white = 0xffffffff;
     g_white = R::CreateTexture(1, 1, &white);
     Log("GL overlay ready: %s / %s", (const char*)glGetString(GL_RENDERER), (const char*)glGetString(GL_VERSION));
@@ -162,7 +167,7 @@ int H() { return g_h; }
 float S() { return g_scale; }
 float px(float v) { return v * g_scale; }
 
-static GLint s_prog, s_vao, s_abuf, s_tex, s_atex, s_fbo, s_vp[4], s_sc[4], s_bsrc, s_bdst, s_bsrca, s_bdsta, s_beq, s_beqa, s_sampler;
+static GLint s_rfbo, s_prog, s_vao, s_abuf, s_tex, s_atex, s_fbo, s_vp[4], s_sc[4], s_bsrc, s_bdst, s_bsrca, s_bdsta, s_beq, s_beqa, s_sampler;
 static GLboolean s_blend, s_depth, s_cull, s_scissor, s_stencil, s_cmask[4], s_dmask;
 
 bool Begin(int sw, int sh) {
@@ -190,6 +195,7 @@ void End() {
     pglActiveTexture(GL_TEXTURE0);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &s_tex);
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &s_fbo);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &s_rfbo);
     glGetIntegerv(GL_VIEWPORT, s_vp);
     glGetIntegerv(GL_SCISSOR_BOX, s_sc);
     glGetIntegerv(GL_BLEND_SRC_RGB, &s_bsrc); glGetIntegerv(GL_BLEND_DST_RGB, &s_bdst);
@@ -231,6 +237,7 @@ void End() {
     pglActiveTexture(s_atex);
     if (pglBindSampler) pglBindSampler(0, s_sampler);
     pglBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_fbo);
+    pglBindFramebuffer(GL_READ_FRAMEBUFFER, s_rfbo);
     glViewport(s_vp[0], s_vp[1], s_vp[2], s_vp[3]);
     glScissor(s_sc[0], s_sc[1], s_sc[2], s_sc[3]);
     pglBlendFuncSeparate(s_bsrc, s_bdst, s_bsrca, s_bdsta);
@@ -274,13 +281,14 @@ uint32_t CreateTexture(int w, int h, const void* rgba) {
     GLuint t; glGenTextures(1, &t);
     GLint prev; glGetIntegerv(GL_TEXTURE_BINDING_2D, &prev);
     glBindTexture(GL_TEXTURE_2D, t);
+    GLint unpack = 4; glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpack);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, unpack);
     glBindTexture(GL_TEXTURE_2D, prev);
     return t;
 }

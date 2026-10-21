@@ -2,7 +2,7 @@
 // context, the driver's debug messages and every shader compile / link to NWNPad-gl.log, and on F11 (or
 // both stick clicks held for a second) captures one frame: screenshot, every draw call with its program,
 // textures and changed uniform values, the programs' shader sources and small textures as TGA files.
-// Written to find rendering bugs on the player's GPU driver (e.g. silver characters in the creator).
+// Written to find rendering bugs on the player's GPU driver.
 #include "gldiag.h"
 #include "config.h"
 #include "pad.h"
@@ -247,6 +247,21 @@ void APIENTRY DebugCb(GLenum source, GLenum type, GLuint id, GLenum severity, GL
     static int total = 0;
     if (++total > 500) return;
     GLog("driver: src %#x type %#x id %u severity %#x: %s", source, type, id, severity, msg ? msg : "");
+    if (type == GL_DEBUG_TYPE_ERROR) {
+        // where in the game the failing call came from (synchronous output: this is the caller's stack)
+        void* fr[24]; USHORT n = RtlCaptureStackBackTrace(1, 24, fr, nullptr);
+        uintptr_t base = (uintptr_t)GetModuleHandleA(nullptr);
+        std::string st;
+        for (USHORT i = 0; i < n; i++) {
+            uintptr_t a = (uintptr_t)fr[i];
+            char b[40];
+            if (a >= base && a < base + 0x1711000) snprintf(b, sizeof b, " %llx", (unsigned long long)(a - base + 0x140000000ull));
+            else snprintf(b, sizeof b, " ?%llx", (unsigned long long)a);
+            st += b;
+        }
+        GLint prog = 0, fb = 0; glGetIntegerv(GL_CURRENT_PROGRAM, &prog); glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &fb);
+        GLog("   at program %d framebuffer %d, stack:%s", prog, fb, st.c_str());
+    }
 }
 
 void OnFirstFrame() {
@@ -260,7 +275,7 @@ void OnFirstFrame() {
     GLog("profile mask %#x (1 core, 2 compatibility), flags %#x", prof, flags);
     auto cb = GLP<PFNGLDEBUGMESSAGECALLBACKPROC>("glDebugMessageCallback");
     if (!cb) cb = GLP<PFNGLDEBUGMESSAGECALLBACKPROC>("glDebugMessageCallbackARB");
-    if (cb) { glEnable(GL_DEBUG_OUTPUT); cb(DebugCb, nullptr); GLog("driver debug messages enabled"); }
+    if (cb) { glEnable(GL_DEBUG_OUTPUT); glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); cb(DebugCb, nullptr); GLog("driver debug messages enabled"); }
     else GLog("no debug message callback");
     GLog("shaders compiled before the first frame: %u", (unsigned)g_shaders.size());
 }
@@ -378,16 +393,57 @@ void GLDiag_Init(const char* binDir) {
 }
 
 // before the overlay is drawn: the recorded frame is complete
+// black-frame detector: brightness of a few back-buffer pixels before and after the overlay; a frame far
+// darker than the frames before it is logged with what the pad UI was doing
+static float g_avgPre = -1, g_lastPre = 0;
+static float SampleBack() {
+    static auto bindfb = GLP<PFNGLBINDFRAMEBUFFERPROC>("glBindFramebuffer");
+    if (!bindfb) return -1;
+    GLint rfb = 0, vp[4]; glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &rfb); glGetIntegerv(GL_VIEWPORT, vp);
+    GLint rb; glGetIntegerv(GL_READ_BUFFER, &rb);
+    bindfb(GL_READ_FRAMEBUFFER, 0);
+    glReadBuffer(GL_BACK);
+    RECT rc; HWND w = GetActiveWindow(); int W = 1920, H = 1080;
+    if (w && GetClientRect(w, &rc)) { W = rc.right; H = rc.bottom; }
+    float sum = 0; int n = 0;
+    for (int j = 1; j <= 5; j++) for (int i = 1; i <= 5; i++) {
+        unsigned char p[4] = {};
+        glReadPixels(W * i / 6, H * j / 6, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, p);
+        sum += 0.3f * p[0] + 0.59f * p[1] + 0.11f * p[2]; n++;
+    }
+    bindfb(GL_READ_FRAMEBUFFER, rfb);
+    glReadBuffer(rb);
+    return sum / n;
+}
+std::string UI_DebugState();
+static void CheckBlack(bool post) {
+    float v = SampleBack();
+    if (v < 0) return;
+    if (!post) {
+        g_lastPre = v;
+        if (g_avgPre > 12 && v < g_avgPre * 0.25f)
+            GLog("BLACK frame before overlay: %.1f (usual %.1f) ui: %s", v, g_avgPre, UI_DebugState().c_str());
+        g_avgPre = g_avgPre < 0 ? v : g_avgPre * 0.9f + v * 0.1f;
+    } else {
+        static float avgPost = -1;
+        if (avgPost > 12 && v < avgPost * 0.25f)
+            GLog("BLACK frame after overlay: %.1f (usual %.1f, before overlay %.1f) ui: %s", v, avgPost, g_lastPre, UI_DebugState().c_str());
+        avgPost = avgPost < 0 ? v : avgPost * 0.9f + v * 0.1f;
+    }
+}
+
 void GLDiag_PreOverlay() {
     if (!g_cfg.glDiag || !o_wglGPA) return;
     static bool first = true;
     if (first) { first = false; OnFirstFrame(); }
     if (g_cap == CAP_REC) { g_cap = CAP_IDLE; FinishCapture(); }
+    CheckBlack(false);
 }
 
 // after the overlay, right before the swap: arm the recording of the next frame
 void GLDiag_PostOverlay() {
     if (!g_cfg.glDiag || !o_wglGPA) return;
+    CheckBlack(true);
     if (g_cap == CAP_IDLE && Trigger()) {
         SYSTEMTIME t; GetLocalTime(&t);
         char d[MAX_PATH]; snprintf(d, sizeof d, "%s\\capture-%02d%02d%02d", g_dir, t.wHour, t.wMinute, t.wSecond);
@@ -409,3 +465,4 @@ void GLDiag_HookSwap() {
     void* sb = (void*)GetProcAddress(GetModuleHandleA("gdi32.dll"), "SwapBuffers");
     if (sb && MH_CreateHook(sb, (void*)hk_Swap, (void**)&o_Swap) == MH_OK && MH_EnableHook(sb) == MH_OK) GLog("own SwapBuffers hook");
 }
+

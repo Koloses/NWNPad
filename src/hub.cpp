@@ -886,3 +886,9 @@ void Hub_DevUse(const char* want, bool equip) {
     Log("dev: no item matching '%s'", want);
 }
 
+
+std::string Hub_DebugState() {
+    if (!HS.open) return "closed";
+    char b[96]; snprintf(b, sizeof b, "tab %d menu %d", HS.tab, (int)HS.menu);
+    return b;
+}
