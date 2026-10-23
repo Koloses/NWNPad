@@ -7,6 +7,7 @@
 #include "text.h"
 #include "res.h"
 #include "log.h"
+#include "pad.h"
 #include <windows.h>
 #include <cstring>
 #include <map>
@@ -32,6 +33,62 @@ struct Key { uint8_t type; char ref[17]; bool operator<(const Key& o) const { re
 struct Entry { Key key; std::string name; };
 std::map<int, Entry> g_names;
 }  // namespace
+
+// ---- modes ----
+// mode toggle buttons (type 10) carry the action mode (ACTION_MODE_*: 0 detect, 1 stealth, 2 parry,
+// 3 power attack, 4 improved power attack, 5 counterspell, 6 flurry, 7 expertise, 8 improved expertise,
+// 9 rapid shot, 10 defensive casting, 11 dirty fighting, 12 defensive stance); feat buttons (type 4) of
+// the feats that toggle a mode count too (CNWSCreature::ToggleMode). The client creature keeps one flag
+// per mode, set from the server's player state (CNWCMessage::HandleServerToPlayerUpdate_PlayerInfo).
+namespace {
+const size_t QB_Id = 0x118;
+int ModeOfButton(void* b) {
+    uint8_t t = F<uint8_t>(b, QB_Type);
+    int id = F<int>(b, QB_Id);
+    if (t == 10) return id >= 0 && id <= 12 ? id : -1;
+    if (t == 4) {
+        switch (id) {
+        case 28: return 3; case 19: return 4; case 204: case 899: case 866: return 6;
+        case 30: return 7; case 389: return 8; case 390: return 9; case 425: return 11; case 947: return 12;
+        }
+    }
+    return -1;
+}
+int ModeFlag(void* cre, int mode) {          // -1 unknown (counterspell has no flag on the client)
+    static const int ofs[13] = {0x234, 0x238, 0x240, 0x244, 0x248, -1, 0x258, 0x254, 0x25c, 0x260, 0x250, 0x264, 0x268};
+    if (!cre || mode < 0 || mode > 12 || ofs[mode] < 0) return -1;
+    return F<int>(cre, ofs[mode]) != 0;
+}
+struct Pending { int mode = -1; int want = 0; double t = 0; } g_pending[13];
+}  // namespace
+
+int QB_ModeState(int bank, int slot) {
+    void* b = Control_QuickButton(bank, slot);
+    void* pl = Player();
+    if (!b || !pl) return 0;
+    int m = ModeOfButton(b);
+    if (m < 0 || m > 12) return 0;
+    int on = ModeFlag(pl, m);
+    Pending& p = g_pending[m];
+    if (p.mode == m) {
+        if (on == p.want || g_pad.now - p.t > 15.0) p.mode = -1;      // done (or never happened)
+        else return 3;
+    }
+    return on == 1 ? 2 : 1;
+}
+
+void QB_NoteUsed(int bank, int slot) {
+    void* b = Control_QuickButton(bank, slot);
+    void* pl = Player();
+    if (!b || !pl) return;
+    int m = ModeOfButton(b);
+    if (m < 0 || m > 12) return;
+    int on = ModeFlag(pl, m);
+    if (on < 0) return;
+    g_pending[m] = {m, !on, g_pad.now};
+    // one combat mode at a time: switching to another stance ends the current one
+    Log("quickslot: mode %d %s", m, on ? "off" : "on");
+}
 
 void QB_Init() {}
 

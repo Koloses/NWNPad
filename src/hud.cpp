@@ -1,5 +1,6 @@
 // NWNPad - gamepad HUD: hero frame, party, target frame, action cluster, message feed
 #include "hud.h"
+#include "quickbar.h"
 #include "inv.h"
 #include "hub_pages.h"
 #include "uikit.h"
@@ -273,6 +274,18 @@ static void DrawSlot(int bank, int slot, PadGlyph g, float cx, float cy, float r
     if (tex) ImageRounded(tex, cx - r * 0.78f, cy - r * 0.78f, r * 1.56f, r * 1.56f, r * 0.78f, disabled ? Col(110, 110, 110, 200) : Col(255, 255, 255, 255));
     else if (!type) TextCentered(FONT_BODY, r * 0.6f, cx, cy - r * 0.42f, "-", Theme::TextFaint);
     Ring(cx, cy, r, px(2), active ? Theme::LineStrong : Theme::Line);
+    // modes: on = steady bright ring, switching = ring sweeping round until the next combat round
+    int ms = QB_ModeState(bank, slot);
+    if (ms == 2) {
+        Ring(cx, cy, r + px(4), px(3.5f), Col(255, 196, 70));
+        float bx = cx - r * 0.42f - px(17), by = cy + r * 0.42f - px(9);
+        RoundRect(bx, by, px(34), px(18), px(6), Col(255, 196, 70));
+        TextCentered(FONT_BODY_BOLD, px(13), bx + px(17), by + px(1), "ON", Col(30, 20, 8));
+    } else if (ms == 3) {
+        float t = (float)g_pad.now * 3.0f;
+        Ring(cx, cy, r + px(4), px(2), Col(255, 196, 70, 70));
+        Arc(cx, cy, r + px(4), px(3.5f), t, t + 2.2f, Col(255, 196, 70));
+    }
     UIK::Glyph(g, cx + r * 0.42f, cy + r * 0.42f, r * 0.62f);
 }
 

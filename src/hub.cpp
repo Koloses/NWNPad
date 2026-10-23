@@ -713,6 +713,9 @@ void DrawQuickbar(float x, float y, float w, float h, float a) {
             uint32_t tex = QB_Icon(b, s, &dis);
             if (tex) ImageRounded(tex, tx + tile * 0.1f, ry + tile * 0.1f, tile * 0.8f, tile * 0.8f, px(8), (dis ? Col(120, 120, 120) : Col(255, 255, 255)).alpha(a));
             else if (!QB_Empty(b, s)) TextCentered(FONT_TITLE, px(28), tx + tile * 0.5f, ry + tile * 0.28f, "?", Theme::GoldDim.alpha(a));
+            int ms = QB_ModeState(b, s);
+            if (ms == 2) RoundRectBorder(tx + px(2), ry + px(2), tile - px(4), tile - px(4), px(9), px(3), Col(255, 196, 70).alpha(a));
+            else if (ms == 3) RoundRectBorder(tx + px(2), ry + px(2), tile - px(4), tile - px(4), px(9), px(2), Col(255, 196, 70).alpha((0.4f + 0.4f * sinf((float)g_pad.now * 6.0f)) * a));
             if (sel) {
                 float p = 0.6f + 0.4f * sinf((float)g_pad.now * 5.0f);
                 RoundRectBorder(tx - px(3), ry - px(3), tile + px(6), tile + px(6), px(12), px(2.5f), Theme::LineStrong.alpha(p * a));

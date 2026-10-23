@@ -1,6 +1,7 @@
 // NWNPad - twin-stick gameplay controls
 #include "control.h"
 #include "navcursor.h"
+#include "quickbar.h"
 #include "inv.h"
 #include "hub_pages.h"
 #include "twoda.h"
@@ -100,6 +101,7 @@ void Control_ClickQuickSlot(int bank, int slot) {
     void* b = Control_QuickButton(bank, slot);
     if (!b) return;
     Log("quickslot bank %d slot %d", bank, slot);
+    QB_NoteUsed(bank, slot);
     typedef void (*fn)(void*);
     ((fn)A(VA_QuickButton_HandleLeftButton))(b);
     g_quickSlotTime = g_pad.now;      // a target mode that starts now goes to the current target
@@ -660,6 +662,14 @@ static void DevCommands(void* player) {
         bool eq = line[0] == 'e';
         std::string want = line + (eq ? 6 : 5); for (auto& c : want) c = (char)tolower((unsigned char)c);
         void Hub_DevUse(const char*, bool); Hub_DevUse(want.c_str(), eq);
+        return;
+    }
+    if (strncmp(line, "qbset ", 6) == 0) {    // qbset <slot> <type> <id>: write a quick button (tests)
+        int sl = 0, ty = 0, id = 0;
+        if (sscanf(line + 6, "%d %d %d", &sl, &ty, &id) == 3) {
+            void* b = Control_QuickButton(g_ctl.quickBank, sl);
+            if (b) { F<uint8_t>(b, 0x140) = (uint8_t)ty; F<int>(b, 0x118) = id; Log("dev: qbset %d type %d id %d", sl, ty, id); }
+        }
         return;
     }
     if (strncmp(line, "use ", 4) == 0) {      // default action on the first object matching the name (or a hex id)
