@@ -4,6 +4,7 @@ struct Config {
     int newHud = 1;            // replace the game's HUD with the gamepad HUD
     int minimap = 1;           // minimap in the top-right corner of the gamepad HUD
     int questMarker = 1;       // quest marker on the minimap (single player)
+    int inventoryGrid = 1;     // hub backpack starts as a grid (0 = list)
     int newDialog = 1;         // gamepad dialogue window
     int newMenus = 1;          // gamepad hub (inventory, character, journal...)
     float deadzoneL = 0.24f, deadzoneR = 0.20f;

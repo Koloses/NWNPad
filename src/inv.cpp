@@ -176,6 +176,24 @@ bool CanUse(uint32_t id) {
     return !it || F<int>(it, IT_Usable) != 0;
 }
 
+// weight in tenths of a pound: the server's CNWSItem::GetWeight in single player (properties, armour AC),
+// else the base item's weight times the stack
+static int ItemWeight(uint32_t id, int baseItem, int stack) {
+    typedef void* (*Get_t)(void*, uint32_t);
+    static HMODULE exe = GetModuleHandleA(nullptr);
+    static auto fItem = (Get_t)GetProcAddress(exe, "?GetItemByGameObjectID@CServerExoApp@@QEAAPEAVCNWSItem@@I@Z");
+    static auto fWeight = (int (*)(void*))GetProcAddress(exe, "?GetWeight@CNWSItem@@QEAAHXZ");
+    static void** am = (void**)GetProcAddress(exe, "?g_pAppManager@@3PEAVCAppManager@@EA");
+    void* srv = am && *am ? F<void*>(*am, 8) : nullptr;
+    if (srv && F<void*>(srv, 8) && !Loading() && fItem && fWeight) {
+        void* si = fItem(srv, id & 0x7fffffffu);
+        if (si) return fWeight(si);
+    }
+    const TwoDA& t = TDA("baseitems");
+    int w = t.Int(baseItem, "TenthLBS", 0);
+    return (w > 0 ? w : 0) * (stack > 0 ? stack : 1);
+}
+
 bool Fill(uint32_t id, InvItem& out) {
     void* it = ItemById(id);
     if (!it || !Readable(it, 0x2a0)) return false;
@@ -201,6 +219,12 @@ bool Fill(uint32_t id, InvItem& out) {
     }
     if (out.name.empty()) out.name = out.typeName;
     out.usable = CanUse(id);
+    out.weight = ItemWeight(id, out.baseItem, out.stack);
+    {
+        const TwoDA& t = TDA("baseitems");
+        out.invW = std::max(1, std::min(4, t.Int(out.baseItem, "InvSlotWidth", 1)));
+        out.invH = std::max(1, std::min(4, t.Int(out.baseItem, "InvSlotHeight", 1)));
+    }
     ReadIcon(it, out);
     return true;
 }

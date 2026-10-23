@@ -28,6 +28,8 @@ struct InvItem {
     std::vector<uint16_t> pltColors;
     std::string typeName;            // base item name
     bool usable = true;              // the hero meets its requirements (class, race, alignment, proficiency, level)
+    int weight = 0;                  // tenths of a pound, whole stack
+    int invW = 1, invH = 1;          // footprint in the game's inventory grid (baseitems InvSlotWidth / Height)
 };
 
 namespace Inv {

@@ -58,7 +58,8 @@ struct HubState {
     Inv::CharInfo ch; double lastChar = -10;
     int qbBank = 0, qbSlot = 0;
     uint32_t descId = 0; float descScroll = 0;
-    int sortMode = 0;            // 0 backpack order, 1 name, 2 type, 3 value
+    int sortMode = 0;            // 0 backpack order, 1 name, 2 type, 3 value, 4 weight
+    bool grid = true;            // backpack as a grid of item footprints (like the original) or a list
     // item action menu / split picker
     enum { M_NONE, M_ACTIONS, M_BAGS, M_SPLIT } menu = M_NONE;
     std::vector<int> acts; int actSel = 0;
@@ -69,9 +70,61 @@ struct HubState {
     bool merging = false; int mergeBase = -1; std::string mergeName; double mergeNext = 0, mergeEnd = 0;
 } HS;
 
-const char* SORT_NAMES[4] = {"Backpack order", "Name", "Type", "Value"};
-
+const char* SORT_NAMES[5] = {"Backpack order", "Name", "Type", "Value", "Weight"};
+const int NSORT = 5;
 std::vector<int> g_list;     // indices into HS.pack after filtering
+
+// grid view: the items packed in the current order into a grid of cells, each item its footprint
+struct Cell { int x, y, w, h; };
+std::vector<Cell> g_cells;   // per g_list entry
+int g_gridCols = 8, g_gridRows = 0;
+void PackGrid(int cols) {
+    g_gridCols = cols < 2 ? 2 : cols;
+    g_cells.clear();
+    std::vector<std::vector<char>> used;
+    auto fits = [&](int x, int y, int w, int h) {
+        if (x + w > g_gridCols) return false;
+        for (int yy = y; yy < y + h; yy++) {
+            if (yy >= (int)used.size()) continue;
+            for (int xx = x; xx < x + w; xx++) if (used[yy][xx]) return false;
+        }
+        return true;
+    };
+    for (int i : g_list) {
+        const InvItem& it = HS.pack[i];
+        int w = std::min(it.invW, g_gridCols), h = it.invH;
+        int px0 = 0, py0 = 0;
+        for (int y = 0;; y++) {
+            bool done = false;
+            for (int x = 0; x + w <= g_gridCols; x++) if (fits(x, y, w, h)) { px0 = x; py0 = y; done = true; break; }
+            if (done) break;
+        }
+        while ((int)used.size() < py0 + h) used.push_back(std::vector<char>(g_gridCols, 0));
+        for (int yy = py0; yy < py0 + h; yy++) for (int xx = px0; xx < px0 + w; xx++) used[yy][xx] = 1;
+        g_cells.push_back({px0, py0, w, h});
+    }
+    g_gridRows = (int)used.size();
+}
+// the item next to the selected one in a direction (dx, dy): nearest centre in that half-plane
+int GridStep(int sel, int dx, int dy) {
+    if (sel < 0 || sel >= (int)g_cells.size()) return sel;
+    const Cell& c = g_cells[sel];
+    float cx = c.x + c.w * 0.5f, cy = c.y + c.h * 0.5f;
+    int best = -1; float bd = 1e9f;
+    for (int i = 0; i < (int)g_cells.size(); i++) {
+        if (i == sel) continue;
+        const Cell& o = g_cells[i];
+        float ox = o.x + o.w * 0.5f - cx, oy = o.y + o.h * 0.5f - cy;
+        float along = ox * dx + oy * dy, across = fabsf(ox * dy - oy * dx);
+        if (along <= 0.01f) continue;
+        // overlapping in the other axis counts as straight ahead
+        bool inLine = dx ? (o.y < c.y + c.h && o.y + o.h > c.y) : (o.x < c.x + c.w && o.x + o.w > c.x);
+        float d = along + (inLine ? 0.0f : across * 2.0f + 0.5f);
+        if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+}
+
 
 void Refresh(bool force = false) {
     if (!force && g_pad.now - HS.lastGather < 0.25) return;
@@ -82,6 +135,7 @@ void Refresh(bool force = false) {
         std::stable_sort(HS.pack.begin(), HS.pack.end(), [m](const InvItem& a, const InvItem& b) {
             if (m == 2 && a.typeName != b.typeName) return a.typeName < b.typeName;
             if (m == 3 && a.cost != b.cost) return a.cost > b.cost;
+            if (m == 4 && a.weight != b.weight) return a.weight > b.weight;
             return a.name < b.name;
         });
     }
@@ -153,6 +207,7 @@ void SwitchTab(int t) {
     HS.open = true;
     HS.extTab = -1;
     HS.openTime = g_pad.now;
+    { static bool viewSet = false; if (!viewSet) { viewSet = true; HS.grid = g_cfg.inventoryGrid != 0; } }
     SyncStatus();
     HS.lastGather = -10;
     HS.lastChar = -10;
@@ -355,6 +410,17 @@ void InventoryInput() {
         if (down) MoveGrid(1, 0);
         if (left) MoveGrid(0, -1);
         if (right) MoveGrid(0, 1);
+    } else if (HS.grid && (int)g_cells.size() == n) {
+        if (n > 0) {
+            int to = HS.sel;
+            if (up) to = GridStep(HS.sel, 0, -1);
+            if (down) to = GridStep(HS.sel, 0, 1);
+            if (right) to = GridStep(HS.sel, 1, 0);
+            if (left) { to = GridStep(HS.sel, -1, 0); if (to < 0) HS.focus = 0; }
+            if (to >= 0) HS.sel = to;
+            if (g_pad.Repeat(PB_LT)) for (int k = 0; k < 4; k++) { int t = GridStep(HS.sel, 0, -1); if (t >= 0) HS.sel = t; }
+            if (g_pad.Repeat(PB_RT)) for (int k = 0; k < 4; k++) { int t = GridStep(HS.sel, 0, 1); if (t >= 0) HS.sel = t; }
+        } else if (left) HS.focus = 0;
     } else {
         if (n > 0) {
             if (up) HS.sel = (HS.sel + n - 1) % n;
@@ -401,7 +467,8 @@ void InventoryInput() {
         }
     }
     if (g_pad.Pressed(PB_X) && it) OpenActions(*it);
-    if (g_pad.Pressed(PB_LS)) { HS.sortMode = (HS.sortMode + 1) % 4; Toast(std::string("Sort: ") + SORT_NAMES[HS.sortMode]); Refresh(true); }
+    if (g_pad.Pressed(PB_LS)) { HS.sortMode = (HS.sortMode + 1) % NSORT; Toast(std::string("Sort: ") + SORT_NAMES[HS.sortMode]); Refresh(true); }
+    if (g_pad.Pressed(PB_BACK)) { HS.grid = !HS.grid; Toast(HS.grid ? "Grid view" : "List view"); }
     if (g_pad.Pressed(PB_Y) && it) { Inv::Examine(pl, it->id); }
     if (g_pad.Pressed(PB_B)) {
         if (HS.filterSlot >= 0) { HS.filterSlot = -1; HS.focus = 0; Refresh(true); }
@@ -517,15 +584,70 @@ void DrawInventory(float x, float y, float w, float h, float a) {
     TextRight(FONT_BODY, px(20), lx + lw, ly + px(2), Fmt((int)g_list.size() == 1 ? "%d item" : "%d items", (int)g_list.size()).c_str(), Theme::TextFaint.alpha(a));
     ly += px(40);
     float lh = h - (ly - y) - px(20);
+    int n = (int)g_list.size();
+    RoundRect(lx, ly, lw, lh, px(12), Col(8, 7, 6, (int)(120 * a)));
+    if (HS.grid) {
+        // grid of footprints, scrolled by rows
+        float cell = px(60);
+        int cols = (int)((lw - px(28)) / cell);
+        PackGrid(cols);
+        float gx0 = lx + (lw - g_gridCols * cell) * 0.5f, gy0 = ly + px(10);
+        int visRows = (int)((lh - px(20)) / cell);
+        if (visRows < 1) visRows = 1;
+        if (HS.sel >= 0 && HS.sel < (int)g_cells.size()) {
+            const Cell& c = g_cells[HS.sel];
+            if (c.y < HS.scroll) HS.scroll = c.y;
+            if (c.y + c.h > HS.scroll + visRows) HS.scroll = c.y + c.h - visRows;
+        }
+        if (HS.scroll > g_gridRows - visRows) HS.scroll = g_gridRows - visRows;
+        if (HS.scroll < 0) HS.scroll = 0;
+        PushClip(lx, ly + px(4), lw, lh - px(8));
+        int rowsShown = std::max(visRows, g_gridRows - HS.scroll);
+        for (int r = 0; r < rowsShown && r < visRows + 1; r++)
+            for (int c = 0; c < g_gridCols; c++)
+                RoundRect(gx0 + c * cell + px(2), gy0 + r * cell + px(2), cell - px(4), cell - px(4), px(6), Col(255, 240, 210, (int)(10 * a)));
+        for (int i = 0; i < n; i++) {
+            const Cell& c = g_cells[i];
+            if (c.y + c.h <= HS.scroll || c.y >= HS.scroll + visRows + 1) continue;
+            const InvItem& it = HS.pack[g_list[i]];
+            float rx = gx0 + c.x * cell + px(2), ry = gy0 + (c.y - HS.scroll) * cell + px(2);
+            float rw = c.w * cell - px(4), rh = c.h * cell - px(4);
+            bool sel = HS.focus == 1 && i == HS.sel;
+            RoundRect(rx, ry, rw, rh, px(8), (it.usable ? Col(40, 34, 26) : Col(120, 30, 24)).alpha(0.85f * a));
+            InvItem shown = it; shown.usable = true;               // the whole footprint is red already
+            float isz = fminf(rw, rh) - px(6);
+            // tall / wide icons fill the footprint (the icon keeps its aspect inside the square it gets)
+            float iw = fminf(rw - px(6), rh - px(6));
+            if (c.w != c.h) isz = fmaxf(rw, rh) - px(6);
+            float ix = rx + (rw - isz) * 0.5f, iy = ry + (rh - isz) * 0.5f;
+            (void)iw;
+            PushClip(rx, ry, rw, rh);
+            Inv::DrawIcon(shown, ix, iy, isz, a);
+            PopClip();
+            if (!it.identified) Circle(rx + px(10), ry + px(10), px(4), Col(150, 170, 220).alpha(a));
+            if (it.stack > 1) {
+                std::string sn = Fmt("%d", it.stack);
+                float tw = TextWidth(FONT_BODY_BOLD, px(15), sn.c_str());
+                RoundRect(rx + rw - tw - px(10), ry + rh - px(20), tw + px(8), px(18), px(5), Col(0, 0, 0, (int)(170 * a)));
+                Text(FONT_BODY_BOLD, px(15), rx + rw - tw - px(6), ry + rh - px(20), sn.c_str(), Theme::Gold.alpha(a));
+            }
+            if (sel) {
+                float p = 0.65f + 0.35f * sinf((float)g_pad.now * 5.0f);
+                RoundRectBorder(rx - px(2), ry - px(2), rw + px(4), rh + px(4), px(9), px(2.5f), Theme::LineStrong.alpha(p * a));
+            } else RoundRectBorder(rx, ry, rw, rh, px(8), px(1), Theme::Line.alpha(0.35f * a));
+        }
+        if (n == 0) TextCentered(FONT_BODY, px(22), lx + lw * 0.5f, ly + px(30), "Empty", Theme::TextFaint.alpha(a));
+        PopClip();
+        UIK::Scrollbar(lx + lw - px(8), ly + px(6), lh - px(12), HS.scroll, visRows, std::max(g_gridRows, visRows));
+        // name of the selected item under the grid is in the details column already
+    } else {
     float rowH = px(62);
     int vis = (int)(lh / rowH);
-    int n = (int)g_list.size();
     if (vis < 1) vis = 1;
     if (HS.sel < HS.scroll) HS.scroll = HS.sel;
     if (HS.sel >= HS.scroll + vis) HS.scroll = HS.sel - vis + 1;
     if (HS.scroll > n - vis) HS.scroll = n - vis;
     if (HS.scroll < 0) HS.scroll = 0;
-    RoundRect(lx, ly, lw, lh, px(12), Col(8, 7, 6, (int)(120 * a)));
     PushClip(lx, ly, lw, lh);
     for (int i = HS.scroll; i < n && i < HS.scroll + vis + 1; i++) {
         const InvItem& it = HS.pack[g_list[i]];
@@ -534,13 +656,17 @@ void DrawInventory(float x, float y, float w, float h, float a) {
         UIK::RowSel(lx + px(4), ry + px(3), lw - px(8), rowH - px(6), sel);
         Inv::DrawIcon(it, lx + px(14), ry + px(7), rowH - px(14), a);
         Col nc = it.identified ? (sel ? Col(255, 244, 222) : Theme::Text) : Col(150, 170, 220);
-        TextFit(FONT_BODY, px(24), lx + px(14) + rowH + px(4), ry + px(9), lw - rowH - px(110), it.name.c_str(), nc.alpha(a));
-        TextFit(FONT_BODY, px(17), lx + px(14) + rowH + px(4), ry + px(36), lw - rowH - px(110), it.typeName.c_str(), Theme::TextFaint.alpha(a));
+        TextFit(FONT_BODY, px(24), lx + px(14) + rowH + px(4), ry + px(9), lw - rowH - px(150), it.name.c_str(), nc.alpha(a));
+        std::string sub = it.typeName;
+        if (HS.sortMode == 3) sub += "  ·  " + Fmt("%d gp", (int)it.cost);
+        if (HS.sortMode == 4) { char wb[32]; snprintf(wb, sizeof wb, "  ·  %.1f lb", it.weight / 10.0f); sub += wb; }
+        TextFit(FONT_BODY, px(17), lx + px(14) + rowH + px(4), ry + px(36), lw - rowH - px(150), sub.c_str(), Theme::TextFaint.alpha(a));
         if (it.stack > 1) TextRight(FONT_BODY_BOLD, px(22), lx + lw - px(22), ry + px(18), Fmt("x%d", it.stack).c_str(), Theme::GoldDim.alpha(a));
     }
     if (n == 0) TextCentered(FONT_BODY, px(22), lx + lw * 0.5f, ly + px(30), "Empty", Theme::TextFaint.alpha(a));
     PopClip();
     UIK::Scrollbar(lx + lw - px(8), ly + px(6), lh - px(12), HS.scroll, vis, n);
+    }
 
     // --- details
     float dy = y + px(18);
@@ -847,7 +973,7 @@ void Hub_Draw() {
         TextCentered(FONT_BODY, px(22), W() * 0.5f, ty + px(7), HS.toast.c_str(), Theme::Text.alpha(ta));
     }
     // hints
-    HintItem hints[8]; int n = 0;
+    HintItem hints[12]; int n = 0;
     hints[n++] = {GL_LB, "Tabs"};
     if (TABS[HS.tab].page) {
         n += TABS[HS.tab].page->hints(hints + n);
@@ -861,6 +987,7 @@ void Hub_Draw() {
         hints[n++] = {GL_X, "Actions"};
         hints[n++] = {GL_Y, "Examine"};
         hints[n++] = {GL_L3, "Sort"};
+        hints[n++] = {GL_BACK, HS.grid ? "List" : "Grid"};
     } else if (HS.tab == 1) {
         if (LevelUpReady()) hints[n++] = {GL_X, "Level up"};
         hints[n++] = {GL_A, "Character sheet"};
