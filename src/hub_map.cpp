@@ -314,8 +314,9 @@ void Map_DrawMinimap(float x, float y, float size, float a) {
     float sc = size / VIEW;
     Vec3 pp = Pos(pl);
     float mcx = x + size * 0.5f, mcy = y + size * 0.5f;
-    float yaw = CameraYaw();
-    float fx = cosf(yaw), fy = sinf(yaw);             // camera forward on the ground = screen up
+    // camera forward on the ground = screen up (the camera yaw is in degrees)
+    float yaw = CameraYaw() * 0.01745329f;
+    float fx = -sinf(yaw), fy = cosf(yaw);
     auto W2S = [&](float wx, float wy, float& sx, float& sy) {
         float dx = wx - pp.x, dy = wy - pp.y;
         float fwd = dx * fx + dy * fy, right = dx * fy - dy * fx;

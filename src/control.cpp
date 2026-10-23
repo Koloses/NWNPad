@@ -117,8 +117,8 @@ static void CamForward(void* player, float& fx, float& fy) {
     float dx = pp.x - cp.x, dy = pp.y - cp.y;
     float l = Len2(dx, dy);
     if (l > 0.05f) { fx = dx / l; fy = dy / l; return; }
-    float yaw = CameraYaw();
-    fx = cosf(yaw); fy = sinf(yaw);
+    float yaw = CameraYaw() * 0.01745329f;              // degrees
+    fx = -sinf(yaw); fy = cosf(yaw);
 }
 
 static bool IsHostile(void* o) {
