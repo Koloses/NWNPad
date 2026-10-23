@@ -46,7 +46,7 @@ const uintptr_t VA_Stats_GetLevel = 0x1407f4870;
 const size_t IT_BaseItem = 0x40, IT_Id = 0x50, IT_Identified = 0x1c0, IT_Icon = 0x238;
 const size_t IT_EquippedBy = 0x25c, IT_Possessor = 0x264, IT_Stack = 0x284;
 const size_t IT_GridX = 0x254, IT_GridY = 0x255;
-const size_t IT_InContainer = 0x268, IT_Stolen = 0x1c4, IT_Cost = 0x280;
+const size_t IT_InContainer = 0x268, IT_Stolen = 0x1c4, IT_Cost = 0x280, IT_Usable = 0x288;
 const size_t CRE_Equipped = 0x308, CRE_Gold = 0x1b8;
 // CPanelInventory (Win)
 const size_t PI_ContainerOpen = 0x2f64, PI_ContainerId = 0x268c;
@@ -155,6 +155,27 @@ static void ReadIcon(void* item, InvItem& out) {
     }
 }
 
+// single player: the server's CNWSCreature::CanUseItem for the player; multiplayer: the flag the server
+// sends with each item's properties (the original inventory paints such items red)
+bool CanUse(uint32_t id) {
+    typedef void* (*Get_t)(void*, uint32_t);
+    static HMODULE exe = GetModuleHandleA(nullptr);
+    static auto fItem = (Get_t)GetProcAddress(exe, "?GetItemByGameObjectID@CServerExoApp@@QEAAPEAVCNWSItem@@I@Z");
+    static auto fCre = (Get_t)GetProcAddress(exe, "?GetCreatureByGameObjectID@CServerExoApp@@QEAAPEAVCNWSCreature@@I@Z");
+    static auto fCanUse = (int (*)(void*, void*, int))GetProcAddress(exe, "?CanUseItem@CNWSCreature@@QEAAHPEAVCNWSItem@@H@Z");
+    static void** am = (void**)GetProcAddress(exe, "?g_pAppManager@@3PEAVCAppManager@@EA");
+    void* pl = Player();
+    if (!pl) return true;
+    void* srv = am && *am ? F<void*>(*am, 8) : nullptr;
+    if (srv && F<void*>(srv, 8) && !Loading() && fItem && fCre && fCanUse) {
+        void* si = fItem(srv, id & 0x7fffffffu);
+        void* sc = fCre(srv, Id(pl) & 0x7fffffffu);
+        if (si && sc) return fCanUse(sc, si, 1) != 0;
+    }
+    void* it = ItemById(id);
+    return !it || F<int>(it, IT_Usable) != 0;
+}
+
 bool Fill(uint32_t id, InvItem& out) {
     void* it = ItemById(id);
     if (!it || !Readable(it, 0x2a0)) return false;
@@ -179,6 +200,7 @@ bool Fill(uint32_t id, InvItem& out) {
         out.typeName = Tlk(F<uint32_t>(bi, 0));
     }
     if (out.name.empty()) out.name = out.typeName;
+    out.usable = CanUse(id);
     ReadIcon(it, out);
     return true;
 }
@@ -452,6 +474,7 @@ uint32_t IconTex(const std::string& r) { return r.empty() ? 0 : Res_Texture(r.c_
 
 void DrawIcon(const InvItem& it, float x, float y, float size, float a) {
     bool any = false;
+    if (!it.usable) R::RoundRect(x, y, size, size, size * 0.12f, Col(150, 28, 22, (int)(150 * a)));   // like the original: red = can't use
     if (it.plt && !it.pltParts.empty()) {
         int w = 0, h = 0;
         uint32_t t = Res_PltTexture(it.pltParts, it.pltColors, &w, &h);

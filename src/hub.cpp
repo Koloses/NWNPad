@@ -218,7 +218,9 @@ void DoAction(int a) {
     if (!it) return;
     InvItem c = *it;
     switch (a) {
-    case IA_EQUIP: Inv::Equip(pl, c, -1); Toast("Equipped " + c.name); break;
+    case IA_EQUIP:
+        if (!c.usable) { Toast("You can't use " + c.name); break; }
+        Inv::Equip(pl, c, -1); Toast("Equipped " + c.name); break;
     case IA_USE: if (!Inv::UseItem(pl, c.id)) { CenterMouse(); Inv::OpenRadial(c.id); } break;
     case IA_SPLIT:
         HS.splitMax = c.stack - 1; HS.splitN = std::max(1, c.stack / 2);
@@ -376,10 +378,14 @@ void InventoryInput() {
                 if (g_list.empty()) { Toast(std::string("Nothing to equip: ") + Inv::SlotName(s)); HS.filterSlot = -1; HS.focus = 0; Refresh(true); }
             }
         } else if (it) {
-            if (HS.filterSlot >= 0) {
+            if (HS.filterSlot >= 0 && !it->usable) {
+                Toast("You can't use " + it->name);
+            } else if (HS.filterSlot >= 0) {
                 Inv::Equip(pl, *it, HS.filterSlot);
                 Toast("Equipped " + it->name);
                 HS.filterSlot = -1; HS.focus = 0;
+            } else if (Inv::BestSlot(pl, *it) >= 0 && !it->usable) {
+                Toast("You can't use " + it->name);
             } else if (Inv::BestSlot(pl, *it) >= 0) {
                 Inv::Equip(pl, *it, -1);
                 Toast("Equipped " + it->name);
@@ -559,6 +565,7 @@ void DrawInventory(float x, float y, float w, float h, float a) {
         else if (it->equippedSlot >= 0) facts = std::string("Equipped: ") + Inv::SlotName(it->equippedSlot);
         if (it->stack > 1) { if (!facts.empty()) facts += "  -  "; facts += Fmt("Stack %d", it->stack); }
         if (!facts.empty()) { TextFit(FONT_BODY_BOLD, px(17), tx, ty, tw, facts.c_str(), (!it->identified ? Col(150, 170, 220) : Theme::Friendly).alpha(a)); ty += px(24); }
+        if (!it->usable) { TextFit(FONT_BODY_BOLD, px(17), tx, ty, tw, "You can't use this", Theme::Hostile.alpha(a)); ty += px(24); }
         cy = fmaxf(iy + is + px(28), ty + px(8));
         if (it->equippedSlot < 0 && (it->equipMask & 0x3fff)) {
             std::string fits;

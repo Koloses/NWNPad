@@ -27,6 +27,7 @@ struct InvItem {
     std::vector<std::string> pltParts;
     std::vector<uint16_t> pltColors;
     std::string typeName;            // base item name
+    bool usable = true;              // the hero meets its requirements (class, race, alignment, proficiency, level)
 };
 
 namespace Inv {
@@ -34,6 +35,7 @@ void Init();
 // gather backpack items (owned by creature, not equipped) and equipped items
 void Gather(void* creature, std::vector<InvItem>& pack, InvItem equipped[ES_TOTAL]);
 bool Fill(uint32_t id, InvItem& out);
+bool CanUse(uint32_t id);                // the player can use / equip it (shown red otherwise)
 void* ItemById(uint32_t id);
 uint32_t EquippedId(void* creature, int slot);
 int Gold(void* creature);
