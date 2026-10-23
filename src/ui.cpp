@@ -18,6 +18,7 @@
 #include "guiscan.h"
 #include "charpanel.h"
 #include "store.h"
+#include "rest.h"
 #include "game.h"
 #include "gamedata.h"
 #include "hooks.h"
@@ -38,6 +39,7 @@ bool UI_PanelHandled(void* panel) {
     if (panel && panel == Dialog_Panel() && Dialog_Active()) return true;
     if (panel && panel == Loot_Panel() && Loot_Active()) return true;
     if (Store_PanelHandled(panel)) return true;
+    if (Rest_KeepHidden(panel)) return true;
     if (Popup_Handled(panel)) return true;
     if (CharPanel_Handled(panel)) return true;
     return false;
@@ -58,6 +60,7 @@ bool Control_UIWantsInput() {
     HubSystem_Update();
     Popup_Frame();
     CharPanel_Frame();
+    if (Rest_Input()) return true;
     if (Popup_Input()) { Cursor_Update(false); return true; }
     if (CharPanel_Input()) { Cursor_Update(false); return true; }
     if (Dialog_Input()) { Cursor_Update(false); return true; }
@@ -95,6 +98,7 @@ static void UI_Frame(HDC hdc) {
         if (loot) Loot_Draw();
         if (store) Store_Draw();
     }
+    if (Rest_Active()) Rest_Draw();
     if (UI_PadPresent()) CharPanel_Draw();
     if (UI_PadPresent()) Popup_Draw();
     if (g_pad.connected) Cursor_Draw();
@@ -145,6 +149,7 @@ void UI_InstallHooks() {
     Describe_InstallHooks();
     Popup_InstallHooks();
     Gui_InstallHooks();
+    Rest_InstallHooks();
 }
 
 // one line of what the pad UI shows (diagnostics)
