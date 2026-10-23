@@ -101,9 +101,9 @@ void Input() {
         if (g_pad.Repeat(PB_RT)) s = s + 8 >= n ? n - 1 : s + 8;
     }
     if (g_pad.Pressed(PB_DLEFT) || g_pad.Pressed(PB_DRIGHT)) { g_list ^= 1; g_textFor = -1; }
-    if (g_pad.Pressed(PB_X) && g_list == 0 && !g_q[0].empty()) {          // show this quest on the minimap
+    if (g_pad.Pressed(PB_X) && g_list == 0 && !g_q[0].empty()) {          // follow this quest (again: back to the latest)
         const Quest& q = g_q[0][std::min(g_sel[0], (int)g_q[0].size() - 1)];
-        Quest_Track(Lower(q.tag) == Quest_Tracked() ? std::string() : q.tag);
+        Quest_Track(Lower(q.tag) == Quest_Tracked() && Quest_FollowChosen() ? std::string() : q.tag);
     }
     if (fabsf(g_pad.ry) > 0.2f) g_textScroll -= g_pad.ry * px(700.0f) * (float)g_pad.dt;
     if (g_pad.Pressed(PB_A)) g_textScroll = 0;
@@ -195,7 +195,11 @@ int Hints(HintItem* o) {
     int n = 0;
     o[n++] = {GL_DPAD, "Choose"};
     o[n++] = {GL_DLEFT, g_list == 0 ? "Completed" : "Active"};
-    if (g_list == 0) o[n++] = {GL_X, "Show on minimap"};
+    if (g_list == 0) {
+        bool cur = false;
+        if (!g_q[0].empty()) { const Quest& q = g_q[0][std::min(g_sel[0], (int)g_q[0].size() - 1)]; cur = Lower(q.tag) == Quest_Tracked() && Quest_FollowChosen(); }
+        o[n++] = {GL_X, cur ? "Unfollow" : "Follow"};
+    }
     o[n++] = {GL_RS, "Scroll"};
     return n;
 }

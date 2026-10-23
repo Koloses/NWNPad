@@ -30,7 +30,7 @@ struct Pin { std::string text; Vec3 pos; };
 float g_zoom = 1.0f;        // 1 = whole area fits
 float g_cx = -1, g_cy = -1; // view centre in metres (-1 = follow the hero)
 bool g_follow = true;
-int g_pinSel = -1;
+int g_sel = -1;             // selection in the list: quests first, then map notes
 uint32_t g_area = 0;
 
 void* Area() { void* pl = Player(); return pl ? F<void*>(pl, OFS::Obj_Area) : nullptr; }
@@ -50,10 +50,21 @@ std::vector<Pin> Pins(void* ar) {
     return v;
 }
 
+// what the map lists: active quests (with a lead in this area or an exit towards it) and map notes
+struct Entry { bool quest; std::string text; Vec3 pos; bool hasPos; QuestMark q; };
+std::vector<Entry> Entries(void* ar) {
+    std::vector<Entry> v;
+    if (g_cfg.questMarker)
+        for (auto& q : Quest_All()) v.push_back({true, q.title, q.point, q.found, q});
+    for (auto& p : Pins(ar)) v.push_back({false, p.text, p.pos, true, QuestMark()});
+    return v;
+}
+
+
 void Open() {
     void* ar = Area();
     uint32_t id = ar ? F<uint32_t>(ar, OFS::Area_Id) : 0;
-    if (id != g_area) { g_area = id; g_zoom = 1.0f; g_pinSel = -1; }
+    if (id != g_area) { g_area = id; g_zoom = 1.0f; g_sel = -1; }
     g_follow = true;
     if (ar) Log("map: area %08x %dx%d '%s'", id, F<int>(ar, 0xc), F<int>(ar, 0x10), ExoStr((char*)ar + 0x238).c_str());
 }
@@ -76,18 +87,24 @@ void Input() {
         g_cx = fminf(aw, fmaxf(0.0f, g_cx + lx * sp * dt));
         g_cy = fminf(ah, fmaxf(0.0f, g_cy + ly * sp * dt));
     }
-    // notes: d-pad cycles and centres on them
-    std::vector<Pin> pins = Pins(ar);
-    int n = (int)pins.size();
+    // quests and notes: d-pad cycles and centres on them, A follows the chosen quest
+    std::vector<Entry> ents = Entries(ar);
+    int n = (int)ents.size();
     bool dn = g_pad.Repeat(PB_DDOWN), up = g_pad.Repeat(PB_DUP);
     if (n > 0 && (dn || up)) {
-        if (dn) g_pinSel = g_pinSel < 0 ? 0 : (g_pinSel + 1) % n;
-        else g_pinSel = g_pinSel < 0 ? n - 1 : (g_pinSel + n - 1) % n;
-        g_cx = pins[g_pinSel].pos.x; g_cy = pins[g_pinSel].pos.y; g_follow = false;
-        if (g_zoom < 2.0f) g_zoom = 2.0f;
+        if (dn) g_sel = g_sel < 0 ? 0 : (g_sel + 1) % n;
+        else g_sel = g_sel < 0 ? n - 1 : (g_sel + n - 1) % n;
+        if (ents[g_sel].hasPos) {
+            g_cx = ents[g_sel].pos.x; g_cy = ents[g_sel].pos.y; g_follow = false;
+            if (g_zoom < 2.0f) g_zoom = 2.0f;
+        }
     }
-    if (g_pinSel >= n) g_pinSel = n - 1;
-    if (g_pad.Pressed(PB_Y)) { g_follow = true; g_pinSel = -1; }
+    if (g_sel >= n) g_sel = n - 1;
+    if (g_sel >= 0 && g_sel < n && ents[g_sel].quest && g_pad.Pressed(PB_A)) {
+        const QuestMark& q = ents[g_sel].q;
+        Quest_Track(q.followed && Quest_FollowChosen() ? std::string() : q.tag);
+    }
+    if (g_pad.Pressed(PB_Y)) { g_follow = true; g_sel = -1; }
     if (g_pad.Pressed(PB_X)) { g_zoom = 1.0f; g_follow = true; }
     if (g_pad.Pressed(PB_B)) Hub_Close();
 }
@@ -144,17 +161,44 @@ void Draw(float x, float y, float w, float h, float a) {
             if (tex) ImageRot(tex, sx, sy, ts + 0.5f, ts + 0.5f, ori, Col(236, 222, 196, (int)(255 * a)));
             else R::Rect(sx, sy, ts, ts, Col(70, 62, 50, (int)(255 * a)));
         }
-    // pins
-    std::vector<Pin> pins = Pins(ar);
-    for (int i = 0; i < (int)pins.size(); i++) {
-        float px0 = ox + pins[i].pos.x * sc, py0 = oy - pins[i].pos.y * sc;
-        bool sel = i == g_pinSel;
-        Circle(px0, py0, px(sel ? 9 : 7), Col(30, 20, 10, (int)(230 * a)));
-        Circle(px0, py0, px(sel ? 7 : 5), (sel ? Theme::LineStrong : Theme::Gold).alpha(a));
-        if (sel || g_zoom >= 2.5f) {
-            float lw = TextWidth(FONT_BODY_BOLD, px(17), pins[i].text.c_str());
-            RoundRect(px0 + px(12), py0 - px(13), lw + px(14), px(26), px(6), Col(10, 8, 6, (int)(210 * a)));
-            Text(FONT_BODY_BOLD, px(17), px0 + px(19), py0 - px(11), pins[i].text.c_str(), Theme::Text.alpha(a));
+    // map notes and quest markers, names above them (a label that would cover another is left out)
+    std::vector<Entry> ents = Entries(ar);
+    std::vector<std::pair<Vec3, Vec3>> taken;              // label rectangles (x0, y0) - (x1, y1)
+    auto label = [&](float cx, float cy, const std::string& t, Col tc, bool force, float fs) {
+        float lw = TextWidth(FONT_BODY_BOLD, fs, t.c_str());
+        float x0 = cx - lw * 0.5f - px(7), y0 = cy - fs - px(14);
+        x0 = fminf(fmaxf(x0, mx + px(4)), mx + mw - lw - px(18));          // keep it inside the map
+        if (y0 < my + px(4)) y0 = cy + px(12);                               // no room above: below the marker
+        float x1 = x0 + lw + px(14), y1 = y0 + fs + px(8);
+        if (!force) for (auto& r : taken) if (x0 < r.second.x && x1 > r.first.x && y0 < r.second.y && y1 > r.first.y) return;
+        taken.push_back({Vec3{x0, y0, 0}, Vec3{x1, y1, 0}});
+        RoundRect(x0, y0, x1 - x0, y1 - y0, px(6), Col(10, 8, 6, (int)(205 * a)));
+        Text(FONT_BODY_BOLD, fs, x0 + px(7), y0 + px(3), t.c_str(), tc.alpha(a));
+    };
+    auto diamond = [&](float qx, float qy, float r, Col c) {
+        Triangle(qx, qy - r * 1.3f, qx + r, qy, qx, qy + r * 1.3f, c);
+        Triangle(qx, qy - r * 1.3f, qx - r, qy, qx, qy + r * 1.3f, c);
+    };
+    // selected / followed first so their labels win
+    std::vector<int> order;
+    for (int i = 0; i < (int)ents.size(); i++) if (i == g_sel || (ents[i].quest && ents[i].q.followed)) order.push_back(i);
+    for (int i = 0; i < (int)ents.size(); i++) if (!(i == g_sel || (ents[i].quest && ents[i].q.followed))) order.push_back(i);
+    for (int i : order) {
+        const Entry& e = ents[i];
+        if (!e.hasPos) continue;
+        float ex = ox + e.pos.x * sc, ey = oy - e.pos.y * sc;
+        bool sel = i == g_sel;
+        if (e.quest) {
+            Col qc = e.q.here ? Col(255, 168, 40) : Col(90, 200, 255);
+            float r = px(e.q.followed ? 8 : 6);
+            if (e.q.followed) Ring(ex, ey, r * 2.0f + px(3) * (0.5f + 0.5f * sinf((float)g_pad.now * 4.0f)), px(2), qc.alpha(0.6f * a));
+            diamond(ex, ey, r + px(2), Col(20, 14, 6, (int)(240 * a)));
+            diamond(ex, ey, r, (sel ? Col(255, 244, 222) : qc).alpha(a));
+            label(ex, ey - r * 0.6f, e.q.here ? e.text : e.text + "  (exit)", e.q.here ? Col(255, 200, 120) : Col(160, 220, 255), sel || e.q.followed, px(16));
+        } else {
+            Circle(ex, ey, px(sel ? 9 : 7), Col(30, 20, 10, (int)(230 * a)));
+            Circle(ex, ey, px(sel ? 7 : 5), (sel ? Theme::LineStrong : Theme::Gold).alpha(a));
+            label(ex, ey, e.text, sel ? Col(255, 244, 222) : Theme::Text, sel, px(sel ? 17 : 15));
         }
     }
     // party
@@ -189,18 +233,51 @@ void Draw(float x, float y, float w, float h, float a) {
     char b[96]; snprintf(b, sizeof b, "Explored %d%%", total ? ex * 100 / total : 0);
     Text(FONT_BODY, px(20), ix, iy, b, Theme::TextDim.alpha(a)); iy += px(40);
     RoundRect(ix, iy, iw, px(1), 0, Theme::Line.alpha(0.4f * a)); iy += px(18);
-    Text(FONT_TITLE, px(22), ix, iy, "Map notes", Theme::GoldDim.alpha(a)); iy += px(38);
-    if (pins.empty()) {
-        TextWrap(FONT_BODY, px(19), ix, iy, iw, "No notes in this area.", Theme::TextFaint.alpha(a));
-    } else {
-        float rowH = px(44);
-        int vis = (int)((y + h - px(30) - iy) / rowH);
-        int first = g_pinSel >= vis ? g_pinSel - vis + 1 : 0;
-        for (int i = first; i < (int)pins.size() && i < first + vis; i++) {
-            float ry = iy + (i - first) * rowH;
-            UIK::RowSel(ix - px(6), ry, iw + px(6), rowH - px(4), i == g_pinSel);
-            Circle(ix + px(10), ry + rowH * 0.5f - px(2), px(4), Theme::Gold.alpha(a));
-            TextFit(FONT_BODY, px(20), ix + px(26), ry + px(9), iw - px(34), pins[i].text.c_str(), Theme::Text.alpha(a));
+    // quests (followed one marked) and map notes, one scrolling list
+    {
+        float rowH = px(42);
+        float listTop = iy, listBottom = y + h - px(30);
+        int nq = 0; for (auto& e : ents) nq += e.quest;
+        int np = (int)ents.size() - nq;
+        int vis = (int)((listBottom - listTop - px(76)) / rowH);
+        if (vis < 3) vis = 3;
+        int first = g_sel >= vis ? g_sel - vis + 1 : 0;
+        float ry = listTop;
+        bool hdrQ = false, hdrP = false;
+        if (nq == 0 && g_cfg.questMarker) {
+            Text(FONT_TITLE, px(22), ix, ry, "Quests", Theme::GoldDim.alpha(a)); ry += px(34);
+            Text(FONT_BODY, px(18), ix, ry, "No active quests.", Theme::TextFaint.alpha(a)); ry += px(36);
+        }
+        for (int i = first; i < (int)ents.size() && i < first + vis; i++) {
+            const Entry& e = ents[i];
+            if (e.quest && !hdrQ) { hdrQ = true; Text(FONT_TITLE, px(22), ix, ry, "Quests", Theme::GoldDim.alpha(a)); ry += px(34); }
+            if (!e.quest && !hdrP) { hdrP = true; if (hdrQ) ry += px(6); Text(FONT_TITLE, px(22), ix, ry, "Map notes", Theme::GoldDim.alpha(a)); ry += px(34); }
+            if (ry + rowH > listBottom) break;
+            UIK::RowSel(ix - px(6), ry, iw + px(6), rowH - px(4), i == g_sel);
+            float my = ry + rowH * 0.5f - px(2);
+            if (e.quest) {
+                Col qc = !e.q.found ? Theme::TextFaint : e.q.here ? Col(255, 168, 40) : Col(90, 200, 255);
+                float r = px(5);
+                Triangle(ix + px(10), my - r * 1.3f, ix + px(10) + r, my, ix + px(10), my + r * 1.3f, qc.alpha(a));
+                Triangle(ix + px(10), my - r * 1.3f, ix + px(10) - r, my, ix + px(10), my + r * 1.3f, qc.alpha(a));
+                float tw = iw - px(34);
+                if (e.q.followed) {
+                    const char* tag = Quest_FollowChosen() ? "Following" : "Latest";
+                    float fw = TextWidth(FONT_BODY_BOLD, px(15), tag) + px(14);
+                    RoundRect(ix + iw - fw, ry + px(8), fw, px(24), px(6), Theme::Gold.alpha(0.85f * a));
+                    Text(FONT_BODY_BOLD, px(15), ix + iw - fw + px(7), ry + px(11), tag, Col(30, 22, 12, (int)(255 * a)));
+                    tw -= fw + px(6);
+                }
+                TextFit(FONT_BODY, px(19), ix + px(26), ry + px(9), tw, e.text.c_str(), (e.q.found ? Theme::Text : Theme::TextDim).alpha(a));
+            } else {
+                Circle(ix + px(10), my, px(4), Theme::Gold.alpha(a));
+                TextFit(FONT_BODY, px(19), ix + px(26), ry + px(9), iw - px(34), e.text.c_str(), Theme::Text.alpha(a));
+            }
+            ry += rowH;
+        }
+        if (np == 0 && ry + px(70) < listBottom) {
+            if (!hdrP) { ry += px(6); Text(FONT_TITLE, px(22), ix, ry, "Map notes", Theme::GoldDim.alpha(a)); ry += px(34); }
+            TextWrap(FONT_BODY, px(18), ix, ry, iw, "No notes in this area.", Theme::TextFaint.alpha(a));
         }
     }
 }
@@ -209,7 +286,12 @@ int Hints(HintItem* o) {
     int n = 0;
     o[n++] = {GL_LS, "Pan"};
     o[n++] = {GL_RT, "Zoom"};
-    o[n++] = {GL_DPAD, "Notes"};
+    o[n++] = {GL_DPAD, "Quests and notes"};
+    void* ar = Area();
+    if (ar && g_sel >= 0) {
+        std::vector<Entry> e = Entries(ar);
+        if (g_sel < (int)e.size() && e[g_sel].quest) o[n++] = {GL_A, e[g_sel].q.followed && Quest_FollowChosen() ? "Unfollow" : "Follow"};
+    }
     o[n++] = {GL_Y, "Centre"};
     return n;
 }
