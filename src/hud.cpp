@@ -162,15 +162,26 @@ void HUD_UpdatePanels(bool hudVisible) {
     else if (g_panelsHidden) { ForEachGameHudPanel(false); g_panelsHidden = false; }
 }
 
+// the hero's whole portrait (NWN portraits are 1:2 textures, the picture fills the top 400 of 512 rows)
+static void PortraitRect(void* cre, float x, float y, float w, float h) {
+    Shadow(x, y, w, h, px(12), px(14), Col(0, 0, 0, 170));
+    RoundRect(x, y, w, h, px(12), Col(16, 14, 12, 235));
+    uint32_t tex = GD::PortraitTex(cre, 'l');
+    if (tex) ImageRounded(tex, x + px(3), y + px(3), w - px(6), h - px(6), px(10), Col(), 0.0f, 0.0f, 1.0f, 400.0f / 512.0f);
+    RoundRectBorder(x, y, w, h, px(12), px(1.5f), Theme::Line);
+}
+
 static void DrawHero(void* pl) {
-    float r = px(70);
-    float cx = px(40) + r, cy = H() - px(40) - r;
-    PortraitCircle(pl, cx, cy, r, px(7), true);
+    float pw = px(112), ph = pw * 400.0f / 256.0f;
+    float pxl = px(40), pyt = H() - px(40) - ph;
+    PortraitRect(pl, pxl, pyt, pw, ph);
+    float cx = pxl + pw * 0.5f, cy = pyt + ph * 0.5f, r = pw * 0.5f;
+    (void)cy;
     // name plate
     std::string name = GD::ObjName(Id(pl));
     GD::HP hp = GD::CreatureHP(pl);
     float nx = cx + r + px(18);
-    float ny = cy - px(40);
+    float ny = pyt + ph - px(110);
     Text(FONT_TITLE, px(30), nx, ny, name.c_str(), Theme::Gold);
     char buf[64];
     snprintf(buf, sizeof buf, "Level %d", GD::Level(pl));

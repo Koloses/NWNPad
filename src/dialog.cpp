@@ -155,18 +155,18 @@ void Dialog_Draw() {
     float maxReplies = H() * 0.36f;
     float shownReplies = fminf(repliesH, maxReplies);
     float h = pad + px(40) + textH + px(22) + shownReplies + pad;
-    if (h < port + pad * 2 + px(20)) h = port + pad * 2 + px(20);
+    float portH = port * 400.0f / 256.0f;                  // the whole picture (top 400 of 512 rows)
+    if (h < portH + pad * 2) h = portH + pad * 2;
     float y = H() - h - px(96) + (1 - ease) * px(40);
     float a = ease;
     UIK::Panel(x, y, w, h, px(18), a);
     // portrait
     void* sp = GetObj(DS.speaker);
-    uint32_t tex = sp ? GD::PortraitTex(sp, 'm') : 0;
+    uint32_t tex = sp ? GD::PortraitTex(sp, 'h') : 0;
     float py = y + pad;
     if (tex) {
-        float ph = fminf(port * 1.56f, h - pad * 2);
-        ImageRounded(tex, x + pad, py, port, ph, px(12), Col(255, 255, 255, (int)(255 * a)), 0, 0, 1, 0.78f * (ph / (port * 1.56f)));
-        RoundRectBorder(x + pad, py, port, port * 1.6f > h - pad * 2 ? h - pad * 2 : port * 1.6f, px(12), px(1.5f), Theme::Line.alpha(a));
+        ImageRounded(tex, x + pad, py, port, portH, px(12), Col(255, 255, 255, (int)(255 * a)), 0, 0, 1, 400.0f / 512.0f);
+        RoundRectBorder(x + pad, py, port, portH, px(12), px(1.5f), Theme::Line.alpha(a));
     } else {
         RoundRect(x + pad, py, port, port, px(12), Col(40, 34, 28, (int)(220 * a)));
         TextCentered(FONT_TITLE, px(64), x + pad + port * 0.5f, py + port * 0.2f, DS.name.empty() ? "?" : DS.name.substr(0, 1).c_str(), Theme::GoldDim.alpha(a));

@@ -1,5 +1,6 @@
 // NWNPad - twin-stick gameplay controls
 #include "control.h"
+#include "navcursor.h"
 #include "inv.h"
 #include "hub_pages.h"
 #include "twoda.h"
@@ -221,9 +222,15 @@ static void CycleTarget(void* player, int dir) {
 }
 
 static bool g_padGameplay = false;
+// While playing with the pad nothing is hovered with the (hidden, parked) mouse: the soft target is,
+// and in conversations / menus nothing - no name and health plate over the hero standing under the
+// parked mouse. The pad cursor (generic panels) keeps the real mouse behaviour.
 bool Control_HoverOverride(void** obj) {
-    if (!g_cfg.enabled || !g_padGameplay || !Player()) return false;
-    *obj = g_ctl.softTarget ? GetObj(g_ctl.softTarget) : nullptr;
+    void* pl = Player();
+    if (!g_cfg.enabled || !pl || !g_pad.connected) return false;
+    if (g_pad.now - g_ctl.lastPadUse > 30.0 || Cursor_Active()) return false;
+    void* o = g_padGameplay && g_ctl.softTarget ? GetObj(g_ctl.softTarget) : nullptr;
+    *obj = o == pl ? nullptr : o;
     return true;
 }
 
