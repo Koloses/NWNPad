@@ -323,6 +323,7 @@ std::string Quest_Tracked() { return S.tag; }
 std::string Quest_Name() { auto it = g_title.find(S.tag); return it != g_title.end() ? it->second : S.tag; }
 
 bool Quest_Marker(Vec3& point, bool& here) {
+    if (G::Loading()) { S.lastScan = g_pad.now; return false; }
     if (g_pad.now - S.lastScan > 2.0) {
         S.lastScan = g_pad.now;
         std::string before = S.tag; bool wasFound = S.found;

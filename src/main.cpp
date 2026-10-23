@@ -34,6 +34,7 @@ static void Init() {
     Control_Init();
     UI_Init(g_dir);
     if (!Hooks_Install()) { Log("hook installation failed"); return; }
+    G::InstallLoadGuard();
     UI_InstallHooks();
     Log("ready");
 }

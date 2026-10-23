@@ -93,7 +93,7 @@ void Init() {
 }
 
 void* ItemById(uint32_t id) {
-    if (id == 0x7f000000 || !App()) return nullptr;
+    if (id == 0x7f000000 || !App() || G::Loading()) return nullptr;
     typedef void* (*fn)(void*, uint32_t);
     void* go = ((fn)A(VA::App_GetGameObject))(App(), id);
     return ItemFromGameObject(go);
