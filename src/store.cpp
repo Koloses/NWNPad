@@ -106,22 +106,72 @@ int BuyPrice(const InvItem& it) {
     return p < 1 ? 1 : p;
 }
 
-// returns -1 if the store will not buy it
-int SellPrice(const InvItem& it, bool* cantAfford = nullptr) {
-    if (!SS.store) return -1;
-    if (!it.stolen || F<int>(SS.store, ST_BlackMarket)) {
-        typedef int (*fn)(void*, int);
-        if (((fn)A(VA_Store_IsRestrictedBuy))(SS.store, it.baseItem)) return -1;
-    } else return -1;
-    int md = it.stolen ? F<uint8_t>(SS.store, ST_MarkDownStolen) : F<uint8_t>(SS.store, ST_MarkDown);
-    int p = it.cost ? (int)((md / 100.0) * it.cost) : 0;
-    if (it.cost && p < 1) p = 1;
-    int mx = F<int>(SS.store, ST_MaxBuy);
-    if (mx != -1 && mx <= p) p = mx;
-    uint32_t gold = F<uint32_t>(SS.store, ST_Gold);
-    if (cantAfford) *cantAfford = gold != 0xffffffff && (uint32_t)p > gold;
-    return p;
+// Why the merchant would refuse an item (the server's CNWSCreature::RequestSell and price checks)
+enum SellWhy { SELL_OK, SELL_PLOT, SELL_STOLEN, SELL_CURSED, SELL_TYPE, SELL_FULLBAG, SELL_WORTHLESS };
+const char* SellWhyText(int w) {
+    switch (w) {
+    case SELL_PLOT: return "Plot item";
+    case SELL_STOLEN: return "Stolen";
+    case SELL_CURSED: return "Can't part with it";
+    case SELL_TYPE: return "Not bought here";
+    case SELL_FULLBAG: return "Empty it first";
+    case SELL_WORTHLESS: return "Worthless";
+    }
+    return "";
 }
+struct SellInfo { int why = SELL_OK; int price = 0; bool poor = false; };
+
+void* SrvApp() {
+    static void** am = (void**)GetProcAddress(GetModuleHandleA(nullptr), "?g_pAppManager@@3PEAVCAppManager@@EA");
+    void* s = am && *am ? F<void*>(*am, 8) : nullptr;
+    return s && F<void*>(s, 8) && !Loading() ? s : nullptr;
+}
+
+SellInfo SellCheck(const InvItem& it) {
+    SellInfo r;
+    if (!SS.store) { r.why = SELL_TYPE; return r; }
+    // single player: ask the server's own objects
+    typedef void* (*Get_t)(void*, uint32_t);
+    static auto fItem = (Get_t)GetProcAddress(GetModuleHandleA(nullptr), "?GetItemByGameObjectID@CServerExoApp@@QEAAPEAVCNWSItem@@I@Z");
+    static auto fStore = (Get_t)GetProcAddress(GetModuleHandleA(nullptr), "?GetStoreByGameObjectID@CServerExoApp@@QEAAPEAVCNWSStore@@I@Z");
+    static auto fRestricted = (int (*)(void*, int))GetProcAddress(GetModuleHandleA(nullptr), "?GetIsRestrictedBuyItem@CNWSStore@@QEAAHH@Z");
+    static auto fPrice = (int (*)(void*, void*, uint32_t))GetProcAddress(GetModuleHandleA(nullptr), "?CalculateItemBuyPrice@CNWSStore@@QEAAHPEAVCNWSItem@@I@Z");
+    void* srv = SrvApp();
+    void* si = srv && fItem ? fItem(srv, it.id & 0x7fffffffu) : nullptr;
+    void* ss = srv && fStore ? fStore(srv, Id(SS.store) & 0x7fffffffu) : nullptr;
+    void* pl = Player();
+    if (si && ss && fRestricted && fPrice && pl && Readable(si, 0x460) && Readable(ss, 0x398)) {
+        void* bag = F<void*>(si, 0x3d0);                       // container contents
+        if (bag && Readable(bag, 0x18)) { void* l = F<void*>(bag, 0x10); if (l && Readable(l, 0x14) && F<int>(l, 0x10) != 0) { r.why = SELL_FULLBAG; return r; } }
+        if (F<int>(si, 0x144) == 1) { r.why = SELL_PLOT; return r; }
+        if (F<int>(si, 0x458) == 1 && F<int>(ss, 0x378) == 0) { r.why = SELL_STOLEN; return r; }
+        if (F<int>(si, 0x450) != 0 || it.equippedSlot >= 0) { r.why = SELL_CURSED; return r; }
+        if (fRestricted(ss, F<int>(si, 0x40))) { r.why = SELL_TYPE; return r; }
+        r.price = fPrice(ss, si, Id(pl) & 0x7fffffffu);
+        if (r.price < 1) { r.why = SELL_WORTHLESS; return r; }
+        int gold = F<int>(ss, 0x38c);
+        r.poor = gold != -1 && r.price > gold;
+        return r;
+    }
+    // multiplayer: what the client knows
+    if (it.stolen && !F<int>(SS.store, ST_BlackMarket)) { r.why = SELL_STOLEN; return r; }
+    typedef int (*fn)(void*, int);
+    if (((fn)A(VA_Store_IsRestrictedBuy))(SS.store, it.baseItem)) { r.why = SELL_TYPE; return r; }
+    if (it.cost == 0) { r.why = SELL_WORTHLESS; return r; }
+    int md = it.stolen ? F<uint8_t>(SS.store, ST_MarkDownStolen) : F<uint8_t>(SS.store, ST_MarkDown);
+    r.price = (int)((md / 100.0) * it.cost);
+    if (r.price < 1) r.price = 1;
+    int mx = F<int>(SS.store, ST_MaxBuy);
+    if (mx != -1 && mx <= r.price) r.price = mx;
+    uint32_t gold = F<uint32_t>(SS.store, ST_Gold);
+    r.poor = gold != 0xffffffff && (uint32_t)r.price > gold;
+    return r;
+}
+
+void Toast(const std::string& s) { SS.toast = s; SS.toastTime = g_pad.now; }
+
+// a sale is only reported once the item has left the backpack
+struct PendingSale { uint32_t id = 0; std::string name; double t = 0; } g_sale;
 
 void GatherWares() {
     SS.wares.clear();
@@ -144,6 +194,13 @@ void Refresh(bool force = false) {
     SS.lastGather = g_pad.now;
     GatherWares();
     Inv::Gather(Player(), SS.pack, SS.eq);
+    // report a sale only when the item really left the backpack
+    if (g_sale.id && g_pad.now - g_sale.t > 0.4) {
+        bool still = false;
+        for (auto& it : SS.pack) if (it.id == g_sale.id) still = true;
+        if (!still) { Toast("Sold " + g_sale.name); g_sale.id = 0; }
+        else if (g_pad.now - g_sale.t > 1.5) { Toast("The merchant did not take " + g_sale.name); Log("store: sale of %08x refused", g_sale.id); g_sale.id = 0; }
+    }
     for (int c = 0; c < 2; c++) {
         auto& v = c ? SS.pack : SS.wares;
         int n = (int)v.size();
@@ -161,7 +218,6 @@ void HidePanels() {
     if (ip && (F<uint32_t>(ip, 0xb0) & 2) == 0) fHide(ip);
 }
 
-void Toast(const std::string& s) { SS.toast = s; SS.toastTime = g_pad.now; }
 
 std::string Gp(int v) { char b[32]; snprintf(b, sizeof b, "%d gp", v); return b; }
 }  // namespace
@@ -201,11 +257,13 @@ bool Store_Active() {
         SS.name = GD::ObjName(F<uint32_t>(st, OFS::Obj_Id));
         if (SS.name.empty() || SS.name.size() > 40) SS.name = "Merchant";
         Hub_Close();
+        Inv::SetGuiOpen(Player(), true);        // repository updates (sold / bought items) while trading
         Log("store: open (tab %d, markup %d, markdown %d, gold %d)", SS.tab, F<short>(st, ST_MarkUp), F<uint8_t>(st, ST_MarkDown), F<int>(st, ST_Gold));
     } else if (!on && SS.active) {
         SS.active = false;
         SS.store = nullptr;
         Log("store: closed");
+        Inv::SetGuiOpen(Player(), false);
         // the game opened the inventory next to the store: close it as well
         void* ip = Inv::InventoryPanel();
         if (ip) { typedef void (*fn)(void*); ((fn)A(VA_PanelInv_HandleXButton))(ip); }
@@ -253,16 +311,15 @@ bool Store_Input() {
                 Toast("Bought " + it.name);
             }
         } else {
-            bool poor = false;
-            int price = SellPrice(it, &poor);
-            if (price < 0) Toast("The merchant will not buy that");
-            else if (poor) Toast("The merchant cannot afford that");
+            SellInfo si = SellCheck(it);
+            if (si.why != SELL_OK) Toast(std::string("The merchant won't take it: ") + SellWhyText(si.why));
+            else if (si.poor) Toast("The merchant cannot afford that");
             else {
                 void* m = Inv::Message();
                 typedef void (*fn)(void*, uint32_t);
                 if (m) ((fn)A(VA_Msg_StoreSell))(m, it.id);
-                Log("store: sell %08x '%s' %d gp", it.id, it.name.c_str(), price);
-                Toast("Sold " + it.name);
+                Log("store: sell %08x '%s' %d gp", it.id, it.name.c_str(), si.price);
+                g_sale.id = it.id; g_sale.name = it.name; g_sale.t = g_pad.now;
             }
         }
         SS.lastGather = g_pad.now - 0.1;
@@ -317,9 +374,11 @@ static void DrawList(int c, float x, float y, float w, float h, float a) {
         float ry = y + (i - scroll) * rowH;
         bool s = focus && i == sel;
         UIK::RowSel(x + px(4), ry + px(3), w - px(8), rowH - px(6), s);
-        Inv::DrawIcon(it, x + px(12), ry + px(7), rowH - px(14), a);
+        bool refused = c == 1 && SellCheck(it).why != SELL_OK;
+        Inv::DrawIcon(it, x + px(12), ry + px(7), rowH - px(14), refused ? a * 0.4f : a);
         float tx = x + px(12) + rowH + px(4);
         Col nc = it.identified ? (s ? Col(255, 244, 222) : Theme::Text) : Col(150, 170, 220);
+        if (refused) nc = Theme::TextFaint;
         std::string nm = it.name;
         if (it.stack > 1) { char b[16]; snprintf(b, sizeof b, "  x%d", it.stack); nm += b; }
         TextFit(FONT_BODY, px(22), tx, ry + px(9), w - (tx - x) - px(120), nm.c_str(), nc.alpha(a));
@@ -331,10 +390,9 @@ static void DrawList(int c, float x, float y, float w, float h, float a) {
             pr = Gp(p);
             if (p > myGold) pc = Theme::Hostile;
         } else {
-            bool poor = false;
-            int p = SellPrice(it, &poor);
-            if (p < 0) { pr = "—"; pc = Theme::TextFaint; }
-            else { pr = Gp(p); if (poor) pc = Theme::Hostile; }
+            SellInfo si = SellCheck(it);
+            if (si.why != SELL_OK) { pr = SellWhyText(si.why); pc = Theme::TextFaint; }
+            else { pr = Gp(si.price); if (si.poor) pc = Theme::Hostile; }
         }
         TextRight(FONT_BODY_BOLD, px(20), x + w - px(18), ry + px(20), pr.c_str(), pc.alpha(a));
     }
@@ -420,7 +478,7 @@ void Store_Draw() {
             static ItemDetailsState ds;
             std::string extra;
             if (SS.col == 0) extra = "Price " + Gp(BuyPrice(v[si]));
-            else { bool poor = false; int p = SellPrice(v[si], &poor); extra = p < 0 ? std::string("Not wanted here") : "Sells for " + Gp(p); }
+            else { SellInfo sc = SellCheck(v[si]); extra = sc.why != SELL_OK ? std::string(SellWhyText(sc.why)) : "Sells for " + Gp(sc.price); }
             UI_ItemDetails(v[si], dx, ly, dw, lh, a, ds, extra);
         }
     }
