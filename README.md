@@ -45,8 +45,15 @@ detects it and disables itself (see the log).
 | Start | Hub menu |
 | Back | Map (hub Map tab) |
 
-The HUD has a minimap in the top-right corner (north up): explored area, your position and
-facing, party (green), enemies (red), other people and map notes. Back opens the full map.
+The HUD has a minimap in the top-right corner that turns with the camera (what is ahead of the
+camera is up, an N on the rim shows north): explored area, your position and facing, party (green),
+enemies (red), other people and map notes. Back opens the full map.
+
+The hero's portrait in the bottom-left corner is a rectangular card with the health bar next to it
+(no ring around the hero in the world). Quick slots holding a mode (Power Attack, Expertise,
+Rapid Shot, Flurry of Blows, Detect / Stealth, Parry, Defensive Casting, Dirty Fighting, Defensive
+Stance ...) show its state: a turning arc while it switches, a gold ring and an ON badge while it
+is active. Resting shows a progress card (time left); B stops resting.
 
 The target is picked automatically from what is in front of the hero; enemies are preferred.
 The target frame shows exact health for your party; for everyone else the game only tells the
@@ -77,8 +84,8 @@ healer's kit right away, anyone else gets a barter offer.
 
 **Quest marker (single player):** the minimap points at who moves your quest on: an orange marker
 (or an arrow on the rim) for someone in this area, a blue one for the door / transition towards the
-area they are in; the quest's name is under the map. It follows the quest updated last; X on the
-hub Journal page shows a different one (X again: back to automatic). The game has no quest markers:
+area they are in; the quest's name is under the map. It follows the quest updated last unless you
+follow one: X on the hub Journal page or A on the hub Map page (X / A again: back to automatic). The game has no quest markers:
 the mod looks through the module's conversations for lines that set a later journal entry of an
 active quest, so a script-only step (killing something, picking up an item) has no marker.
 `QuestMarker=0` in `[Interface]` turns it off.
@@ -94,12 +101,16 @@ game's item wheel.
 
 LB / RB switch tabs: Inventory, Character, Quickbar, Spells, Journal, Map, System.
 
-* **Inventory** - equipment on the left, backpack in the middle, details on the right.
+* **Inventory** - equipment on the left, backpack in the middle, details on the right. The
+  backpack is a grid like the game's (items take their real size, stack counts in the corner);
+  Back switches to a list and back (`InventoryView=grid|list` in `[Interface]` sets the start).
   A on an equipped slot unequips it; A on an empty slot lists the backpack items that fit it.
   A on a backpack item equips it (or uses it; A on a bag opens it). X opens the item menu:
   equip, use, split stack (d-pad sets the amount, LT / RT min / max), combine stacks, open,
   put in a bag, drop, examine, more actions (the game's wheel). Y examines, left stick click
-  cycles the backpack order (as carried, name, type, value).
+  cycles the backpack order (as carried, name, type, value, weight). Items your character
+  cannot use (class, race, alignment, feats, ability scores) have a red background, the details
+  say so, and equipping them is refused.
 * **Character** - abilities, hit points, armour class, attack bonus, experience, gold.
   A opens the full character sheet, X levels up when available, Y rests.
 * **Quickbar** - all 36 slots with the button that triggers each one. A opens the game's
@@ -115,8 +126,11 @@ LB / RB switch tabs: Inventory, Character, Quickbar, Spells, Journal, Map, Syste
   The right pane shows the spell's description (right stick scrolls).
 * **Journal** - active and completed quests (X switches), the newest entry of the selected
   quest on the right.
-* **Map** - explored part of the current area with your position and facing, party members
-  and map notes. Left stick pans, LT / RT zoom, d-pad jumps between notes, Y re-centres.
+* **Map** - explored part of the current area with your position and facing, party members,
+  map notes with their names above the dots, and quest markers (diamonds with the quest's name:
+  orange for someone here, blue "(exit)" for the way to another area; the followed one pulses).
+  The list on the right has the quests and the notes: d-pad selects (the map shows it), A follows
+  / unfollows a quest. Left stick pans, LT / RT zoom, Y re-centres.
 * **System** - resume, quick save, save game (new save or overwrite, A twice to confirm),
   load game (list with previews), rest, save character, the game's option screens and exit
   to the main menu.
@@ -126,7 +140,8 @@ and merchant windows; the right stick scrolls them.
 
 ### Conversations
 
-D-pad / left stick choose a reply, A answers (or continues), B leaves.
+D-pad / left stick choose a reply, A answers (or continues), B leaves. The speaker's full portrait
+is shown next to the text.
 
 ### Loot (chests, corpses, bags)
 
@@ -137,7 +152,10 @@ B closes. The selected item's description is shown on the right.
 
 Left list is the merchant, right list your backpack (d-pad left / right switches). A buys or
 sells, Y examines, LB / RB change the category, LT / RT the page, B leaves. Prices the
-merchant will pay are shown next to your items; red prices are out of reach.
+merchant will pay are shown next to your items; red prices are out of reach. Items the merchant
+will not take are dimmed with the reason instead of a price (plot item, stolen, cursed, kind of
+item the merchant does not trade in, worthless, bags that are not empty). After a sale the mod
+checks the item really left your backpack and says so if the merchant refused it.
 
 ### Character creation and level-up
 
