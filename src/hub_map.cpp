@@ -299,7 +299,8 @@ int Hints(HintItem* o) {
 
 const HubPage PAGE_MAP = {Open, Input, Draw, Hints, nullptr};
 
-// HUD minimap: north-up square around the hero (explored tiles, notes, party, hostiles)
+// HUD minimap: square around the hero, turned with the camera (what is ahead of the camera is up;
+// explored tiles, notes, party, hostiles, quest marker), north marker on the rim
 void Map_DrawMinimap(float x, float y, float size, float a) {
     void* ar = Area();
     void* pl = Player();
@@ -312,24 +313,38 @@ void Map_DrawMinimap(float x, float y, float size, float a) {
     const float VIEW = 44.0f;                         // metres across
     float sc = size / VIEW;
     Vec3 pp = Pos(pl);
-    float ox = x + size * 0.5f - pp.x * sc, oy = y + size * 0.5f + pp.y * sc;
+    float mcx = x + size * 0.5f, mcy = y + size * 0.5f;
+    float yaw = CameraYaw();
+    float fx = cosf(yaw), fy = sinf(yaw);             // camera forward on the ground = screen up
+    auto W2S = [&](float wx, float wy, float& sx, float& sy) {
+        float dx = wx - pp.x, dy = wy - pp.y;
+        float fwd = dx * fx + dy * fy, right = dx * fy - dy * fx;
+        sx = mcx + right * sc; sy = mcy - fwd * sc;
+    };
+    auto ScreenAngle = [&](float wx, float wy) {      // world direction -> screen angle (0 = up, clockwise)
+        float fwd = wx * fx + wy * fy, right = wx * fy - wy * fx;
+        return atan2f(right, fwd);
+    };
     PushClip(x + px(3), y + px(3), size - px(6), size - px(6));
-    float ts = TILE_M * sc;
-    int tx0 = std::max(0, (int)((pp.x - VIEW) / TILE_M)), tx1 = std::min(tw - 1, (int)((pp.x + VIEW) / TILE_M));
-    int ty0 = std::max(0, (int)((pp.y - VIEW) / TILE_M)), ty1 = std::min(th - 1, (int)((pp.y + VIEW) / TILE_M));
+    float R2 = VIEW * 0.75f;                          // tiles within the rotated square's reach
+    int tx0 = std::max(0, (int)((pp.x - R2) / TILE_M)), tx1 = std::min(tw - 1, (int)((pp.x + R2) / TILE_M));
+    int ty0 = std::max(0, (int)((pp.y - R2) / TILE_M)), ty1 = std::min(th - 1, (int)((pp.y + R2) / TILE_M));
     for (int ty = ty0; ty <= ty1; ty++)
         for (int tx = tx0; tx <= tx1; tx++) {
             char* t = tiles + (size_t)(ty * tw + tx) * 0x60;
             if (!F<int>(t, 0x30)) continue;
-            float sx = ox + tx * ts, sy = oy - (ty + 1) * ts;
             void* td = F<void*>(t, 0x40);
             uint32_t tex = 0;
             if (td && Readable((char*)td + 0x21, 16)) { char ref[17] = {}; memcpy(ref, (char*)td + 0x21, 16); tex = Res_Texture(ref); }
-            if (tex) ImageRot(tex, sx, sy, ts + 0.5f, ts + 0.5f, F<int>(t, 0x24) & 3, Col(236, 222, 196, (int)(235 * a)));
-            else R::Rect(sx, sy, ts, ts, Col(70, 62, 50, (int)(235 * a)));
+            // corners as drawn north-up: top-left = (x0, y1), top-right = (x1, y1), bottom-right = (x1, y0), bottom-left = (x0, y0)
+            float e = 0.02f;                          // a hair of overlap against seams
+            float X0 = tx * TILE_M - e, X1 = (tx + 1) * TILE_M + e, Y0 = ty * TILE_M - e, Y1 = (ty + 1) * TILE_M + e;
+            float qx[4], qy[4];
+            W2S(X0, Y1, qx[0], qy[0]); W2S(X1, Y1, qx[1], qy[1]); W2S(X1, Y0, qx[2], qy[2]); W2S(X0, Y0, qx[3], qy[3]);
+            ImageQuad(tex, qx, qy, tex ? (F<int>(t, 0x24) & 3) : 0, tex ? Col(236, 222, 196, (int)(235 * a)) : Col(70, 62, 50, (int)(235 * a)));
         }
     for (const Pin& p : Pins(ar)) {
-        float px0 = ox + p.pos.x * sc, py0 = oy - p.pos.y * sc;
+        float px0, py0; W2S(p.pos.x, p.pos.y, px0, py0);
         Circle(px0, py0, px(5), Col(30, 20, 10, (int)(230 * a)));
         Circle(px0, py0, px(3.5f), Theme::Gold.alpha(a));
     }
@@ -341,10 +356,10 @@ void Map_DrawMinimap(float x, float y, float size, float a) {
         void* o = GetObj(ids[i]);
         if (!o || Type(o) != OT_CREATURE || Id(o) == pid || GD::IsDead(o)) continue;
         Vec3 q = Pos(o);
-        if (fabsf(q.x - pp.x) > VIEW * 0.5f || fabsf(q.y - pp.y) > VIEW * 0.5f) continue;
+        if (fabsf(q.x - pp.x) > R2 || fabsf(q.y - pp.y) > R2) continue;
         bool party = GD::MasterId(o) == pid;
         int r = GD::Reaction(o);
-        float cx = ox + q.x * sc, cy = oy - q.y * sc;
+        float cx, cy; W2S(q.x, q.y, cx, cy);
         if (!party && r != 2) {          // other people: small neutral dot
             Circle(cx, cy, px(3.5f), Col(10, 8, 6, (int)(200 * a)));
             Circle(cx, cy, px(2.3f), Col(214, 200, 160, (int)(220 * a)));
@@ -357,8 +372,8 @@ void Map_DrawMinimap(float x, float y, float size, float a) {
     Vec3 qp; bool qhere = false;
     bool quest = g_cfg.questMarker && Quest_Marker(qp, qhere);
     if (quest) {
-        float qx = ox + qp.x * sc, qy = oy - qp.y * sc;
-        float cx = x + size * 0.5f, cy = y + size * 0.5f, half = size * 0.5f - px(14);
+        float qx, qy; W2S(qp.x, qp.y, qx, qy);
+        float cx = mcx, cy = mcy, half = size * 0.5f - px(14);
         float dx = qx - cx, dy = qy - cy;
         float m = fmaxf(fabsf(dx), fabsf(dy));
         Col qc = qhere ? Col(255, 168, 40) : Col(90, 200, 255);
@@ -378,18 +393,23 @@ void Map_DrawMinimap(float x, float y, float size, float a) {
             Arrow(ax, ay, px(8), ang, qc.alpha(a * pulse));
         }
     }
-    // hero + camera view direction
-    float hx = x + size * 0.5f, hy = y + size * 0.5f;
+    // hero, facing
     Vec3 o = F<Vec3>(pl, OFS::Obj_Orient);
-    Arrow(hx, hy, px(12), atan2f(o.x, o.y), Col(20, 14, 6, (int)(255 * a)));
-    Arrow(hx, hy, px(9), atan2f(o.x, o.y), Theme::LineStrong.alpha(a));
+    float face = ScreenAngle(o.x, o.y);
+    Arrow(mcx, mcy, px(12), face, Col(20, 14, 6, (int)(255 * a)));
+    Arrow(mcx, mcy, px(9), face, Theme::LineStrong.alpha(a));
     PopClip();
     RoundRectBorder(x, y, size, size, px(14), px(1.5f), Theme::Line.alpha(a));
-    // north marker on the frame
-    float nx = x + size * 0.5f;
-    Circle(nx, y, px(11), Col(20, 16, 12, (int)(240 * a)));
-    Ring(nx, y, px(11), px(1.2f), Theme::Line.alpha(a));
-    TextCentered(FONT_TITLE, px(14), nx, y - px(8), "N", Theme::Gold.alpha(a));
+    // north marker where north meets the frame
+    {
+        float ang = ScreenAngle(0, 1);
+        float dx = sinf(ang), dy = -cosf(ang);
+        float k = (size * 0.5f) / fmaxf(fabsf(dx), fabsf(dy));
+        float nx = mcx + dx * k, ny = mcy + dy * k;
+        Circle(nx, ny, px(11), Col(20, 16, 12, (int)(240 * a)));
+        Ring(nx, ny, px(11), px(1.2f), Theme::Line.alpha(a));
+        TextCentered(FONT_TITLE, px(14), nx, ny - px(8), "N", Theme::Gold.alpha(a));
+    }
     // tracked quest under the map
     float below = 0;
     if (quest) {
