@@ -153,6 +153,7 @@ static void UI_Frame(HDC hdc) {
 }
 
 static BOOL WINAPI hk_SwapBuffers(HDC hdc) {
+    G::NewFrame();
     GLDiag_PreOverlay();
     Fps_Tick();
     if (g_cfg.enabled) UI_Frame(hdc);
