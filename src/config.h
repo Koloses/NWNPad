@@ -5,6 +5,7 @@ struct Config {
     int minimap = 1;           // minimap in the top-right corner of the gamepad HUD
     int questMarker = 1;       // quest marker on the minimap (single player)
     int inventoryGrid = 1;     // hub backpack starts as a grid (0 = list)
+    int showFps = 0;           // frame rate counter in the top-left corner
     int newDialog = 1;         // gamepad dialogue window
     int newMenus = 1;          // gamepad hub (inventory, character, journal...)
     float deadzoneL = 0.24f, deadzoneR = 0.20f;

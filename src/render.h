@@ -21,6 +21,7 @@ namespace R {
 bool Begin(int screenW, int screenH);    // returns false if GL not ready
 void End();
 int W(); int H();
+const char* Renderer();                  // GL_RENDERER of the game's context
 float S();                               // ui scale (1.0 at 1080p)
 float px(float v);                       // scaled pixels
 // shapes (anti-aliased, SDF)

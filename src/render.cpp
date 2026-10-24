@@ -7,6 +7,8 @@
 #include <vector>
 #include <cmath>
 #include <cstring>
+#include <cstdio>
+static char g_renderer[160] = "";
 
 // ---------------------------------------------------------------------------------------------
 // GL entry points
@@ -126,6 +128,7 @@ static bool InitGL() {
     uint32_t white = 0xffffffff;
     g_white = R::CreateTexture(1, 1, &white);
     Log("GL overlay ready: %s / %s", (const char*)glGetString(GL_RENDERER), (const char*)glGetString(GL_VERSION));
+    if (const char* rn = (const char*)glGetString(GL_RENDERER)) snprintf(g_renderer, sizeof g_renderer, "%s", rn);
     return true;
 }
 
@@ -162,6 +165,7 @@ static void ShapeQuad(float x, float y, float w, float h, float rad, float p1, f
 }
 
 namespace R {
+const char* Renderer() { return g_renderer; }
 int W() { return g_w; }
 int H() { return g_h; }
 float S() { return g_scale; }

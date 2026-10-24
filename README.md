@@ -91,6 +91,9 @@ the mod looks through the module's conversations for lines that set a later jour
 active quest, so a script-only step (killing something, picking up an item) has no marker.
 `QuestMarker=0` in `[Interface]` turns it off.
 
+**Frame rate:** `ShowFPS=1` in `[Interface]` shows frames per second, the average and worst frame
+time of the last second and the OpenGL renderer (e.g. zink on your GPU) in the top-left corner.
+
 **Corpses** are no longer targeted (their loot is in the bag they drop); the pause pointer still
 reaches them.
 

@@ -1,5 +1,7 @@
 // NWNPad UI core: overlay frame hook, input routing between screens
 #include "ui.h"
+#include <algorithm>
+#include <cstdio>
 #include "questmark.h"
 #include "gldiag.h"
 #include "render.h"
@@ -79,6 +81,36 @@ bool Control_UIWantsInput() {
 
 void Gui_EnforceHidden();
 
+// frame rate: frames per second over the last half second, average and worst frame time over the last second
+static struct { double last = 0, t[256] = {}; int n = 0, head = 0; float fps = 0, avg = 0, worst = 0; double shown = 0; } g_fps;
+static void Fps_Tick() {
+    LARGE_INTEGER f, c; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&c);
+    double now = (double)c.QuadPart / f.QuadPart;
+    if (g_fps.last > 0) { g_fps.t[g_fps.head] = now - g_fps.last; g_fps.head = (g_fps.head + 1) & 255; if (g_fps.n < 256) g_fps.n++; }
+    g_fps.last = now;
+    if (now - g_fps.shown < 0.5) return;
+    g_fps.shown = now;
+    double sum = 0, worst = 0; int k = 0;
+    for (int i = 1; i <= g_fps.n && sum < 1.0; i++) { double d = g_fps.t[(g_fps.head - i) & 255]; sum += d; worst = d > worst ? d : worst; k++; }
+    g_fps.avg = k ? (float)(sum / k * 1000.0) : 0;
+    g_fps.fps = sum > 0 ? (float)(k / sum) : 0;
+    g_fps.worst = (float)(worst * 1000.0);
+}
+static void Fps_Draw() {
+    using namespace R;
+    char a[64], b[96];
+    snprintf(a, sizeof a, "%.0f fps", g_fps.fps);
+    snprintf(b, sizeof b, "%.1f ms avg   %.1f ms worst", g_fps.avg, g_fps.worst);
+    const char* rn = Renderer();
+    float x = px(16), y = px(12), sz = px(17), small = px(14);
+    float w = std::max(TextWidth(FONT_BODY_BOLD, sz, a), std::max(TextWidth(FONT_BODY, small, b), TextWidth(FONT_BODY, small, rn))) + px(20);
+    RoundRect(x, y, w, px(72), px(8), Col(0, 0, 0, 150));
+    Col c = g_fps.fps >= 55 ? Col(120, 230, 120) : g_fps.fps >= 30 ? Col(240, 210, 90) : Col(240, 100, 80);
+    Text(FONT_BODY_BOLD, sz, x + px(10), y + px(6), a, c);
+    Text(FONT_BODY, small, x + px(10), y + px(30), b, Col(220, 214, 200));
+    Text(FONT_BODY, small, x + px(10), y + px(50), rn, Col(170, 164, 150));
+}
+
 static void UI_Frame(HDC hdc) {
     Gui_EnforceHidden();
     HWND wnd = WindowFromDC(hdc);
@@ -116,11 +148,13 @@ static void UI_Frame(HDC hdc) {
             UI_DrawHints(h, 5, 0.95f);
         }
     }
+    if (g_cfg.showFps) Fps_Draw();
     R::End();
 }
 
 static BOOL WINAPI hk_SwapBuffers(HDC hdc) {
     GLDiag_PreOverlay();
+    Fps_Tick();
     if (g_cfg.enabled) UI_Frame(hdc);
     GLDiag_PostOverlay();
     return o_SwapBuffers(hdc);
