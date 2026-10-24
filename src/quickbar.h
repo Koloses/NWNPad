@@ -8,6 +8,10 @@ std::string QB_Name(int bank, int slot);              // what the slot does ("" 
 bool QB_Empty(int bank, int slot);
 uint32_t QB_Icon(int bank, int slot, bool* disabled = nullptr);   // GL texture or 0
 void QB_Clear(int bank, int slot);
+// put an inventory item on a slot (as dragging it there: potions are drunk, weapons / shields swapped in)
+bool QB_SetItem(int bank, int slot, uint32_t itemId);
+// item slots: the item's icon (two for a weapon pair) with its stack count; false if the slot holds no item
+bool QB_DrawItem(int bank, int slot, float x, float y, float size, float alpha, bool round = false);
 void QB_Edit(int bank, int slot);
 // modes (stances, detect, stealth ...) on quick slots: 0 not a mode, 1 off, 2 on, 3 switching (pressed,
 // the game changes it at the next combat round)

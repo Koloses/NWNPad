@@ -664,6 +664,11 @@ static void DevCommands(void* player) {
         void Hub_DevUse(const char*, bool); Hub_DevUse(want.c_str(), eq);
         return;
     }
+    if (strncmp(line, "qbitem ", 7) == 0) {   // qbitem <slot> <name>: put an item on a quick slot (tests)
+        int sl = 0, n = 0; char nm[64] = {};
+        if (sscanf(line + 7, "%d %63[^\r\n]%n", &sl, nm, &n) >= 2) { for (char* c = nm; *c; c++) *c = (char)tolower((unsigned char)*c); void Hub_DevQuick(int, const char*); Hub_DevQuick(sl, nm); }
+        return;
+    }
     if (strncmp(line, "qbset ", 6) == 0) {    // qbset <slot> <type> <id>: write a quick button (tests)
         int sl = 0, ty = 0, id = 0;
         if (sscanf(line + 6, "%d %d %d", &sl, &ty, &id) == 3) {

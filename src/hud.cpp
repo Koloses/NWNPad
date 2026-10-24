@@ -270,8 +270,9 @@ static void DrawSlot(int bank, int slot, PadGlyph g, float cx, float cy, float r
     if (b && type) memcpy(ref, (char*)b + 0x11c, 16);
     bool disabled = b ? (F<uint32_t>(b, 8) & 1) != 0 : true;
     Circle(cx, cy, r, Col(14, 12, 10, 225));
-    uint32_t tex = ref[0] ? Res_Texture(ref) : 0;
-    if (tex) ImageRounded(tex, cx - r * 0.78f, cy - r * 0.78f, r * 1.56f, r * 1.56f, r * 0.78f, disabled ? Col(110, 110, 110, 200) : Col(255, 255, 255, 255));
+    uint32_t tex = ref[0] && type != 1 ? Res_Texture(ref) : 0;
+    if (type == 1 && QB_DrawItem(bank, slot, cx - r, cy - r, r * 2, disabled ? 0.5f : 1.0f, true)) {}
+    else if (tex) ImageRounded(tex, cx - r * 0.78f, cy - r * 0.78f, r * 1.56f, r * 1.56f, r * 0.78f, disabled ? Col(110, 110, 110, 200) : Col(255, 255, 255, 255));
     else if (!type) TextCentered(FONT_BODY, r * 0.6f, cx, cy - r * 0.42f, "-", Theme::TextFaint);
     Ring(cx, cy, r, px(2), active ? Theme::LineStrong : Theme::Line);
     // modes: on = steady bright ring, switching = ring sweeping round until the next combat round

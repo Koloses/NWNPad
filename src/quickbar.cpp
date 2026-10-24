@@ -8,6 +8,9 @@
 #include "res.h"
 #include "log.h"
 #include "pad.h"
+#include "inv.h"
+#include "render.h"
+#include <cstdio>
 #include <windows.h>
 #include <cstring>
 #include <map>
@@ -153,6 +156,43 @@ void QB_Clear(int bank, int slot) {
     Log("quickbar clear bank %d slot %d", bank, slot);
     typedef void (*fn)(void*);
     ((fn)A(0x14085e6c0))(b);              // CGuiQuickButton::RadialMenuItemClearSlot
+}
+
+static const InvItem* CachedItem(uint32_t id) {
+    struct E { InvItem it; double t; bool ok; };
+    static std::map<uint32_t, E> cache;
+    auto& e = cache[id];
+    if (g_pad.now - e.t > 1.0) { e.t = g_pad.now; e.ok = Inv::Fill(id, e.it); }
+    return e.ok ? &e.it : nullptr;
+}
+
+bool QB_DrawItem(int bank, int slot, float x, float y, float size, float a, bool round) {
+    void* b = Control_QuickButton(bank, slot);
+    if (!b || F<uint8_t>(b, QB_Type) != 1) return false;
+    uint32_t id = F<uint32_t>(b, 0xec), id2 = F<uint32_t>(b, 0xf0);     // Linux 0x10c / 0x110
+    const InvItem* it = CachedItem(id);
+    const InvItem* it2 = id2 != 0x7f000000 && id2 != id ? CachedItem(id2) : nullptr;
+    if (!it) return false;
+    float s = round ? size * 0.72f : size;
+    float ox = x + (size - s) * 0.5f, oy = y + (size - s) * 0.5f;
+    if (it2) {                                          // weapon + off-hand pair: side by side
+        Inv::DrawIcon(*it, ox, oy + s * 0.12f, s * 0.6f, a);
+        Inv::DrawIcon(*it2, ox + s * 0.4f, oy + s * 0.28f, s * 0.6f, a);
+    } else Inv::DrawIcon(*it, ox, oy, s, a);
+    if (it->stack > 1) {
+        char n[16]; snprintf(n, sizeof n, "%d", it->stack);
+        R::TextRight(FONT_BODY_BOLD, size * 0.24f, x + size * (round ? 0.86f : 0.95f), y + size * (round ? 0.58f : 0.68f), n, Col(255, 255, 255).alpha(a));
+    }
+    return true;
+}
+
+bool QB_SetItem(int bank, int slot, uint32_t itemId) {
+    void* b = Control_QuickButton(bank, slot);
+    if (!b) return false;
+    typedef void (*fn)(void*, uint32_t, int, int);
+    ((fn)A(0x1408661c0))(b, itemId, 0xff00ff, 0);        // CGuiQuickButton::SetButtonItem (no property: the item's own use)
+    Log("quickbar bank %d slot %d item %08x -> type %d", bank, slot, itemId, F<uint8_t>(b, QB_Type));
+    return F<uint8_t>(b, QB_Type) != 0;
 }
 
 void QB_Binding(int slot, int& mod, int& btn) {

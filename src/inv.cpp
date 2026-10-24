@@ -570,7 +570,142 @@ CharInfo Character(void* cre) {
     GD::HP h = GD::CreatureHP(cre);
     c.hp = h.cur; c.hpMax = h.max;
     c.gold = Gold(cre);
+    // the character sheet's own data: totals at +0x70, item / effect bonuses at +0x7d
+    if (F<uint8_t>(st, 0x70) > 0) {
+        c.sheet = true;
+        for (int i = 0; i < 6; i++) {
+            c.ab[i] = F<uint8_t>(st, 0x70 + i);
+            c.abBase[i] = c.ab[i] - (signed char)F<char>(st, 0x7d + i);
+        }
+    } else for (int i = 0; i < 6; i++) c.abBase[i] = c.ab[i] - (signed char)F<char>(st, bonusOff[i]);
+    c.fort = (signed char)F<char>(st, 0x98);
+    c.will = (signed char)F<char>(st, 0x99);
+    c.ref = (signed char)F<char>(st, 0x9a);
+    {
+        short lc = F<short>(st, 0xc6), ge = F<short>(st, 0xc8);
+        int ref = lc < 31 ? (ge < 31 ? 0x1359 : ge > 69 ? 0x1353 : 0x1356)
+                : lc < 70 ? (ge == 50 ? 0x1355 : ge < 31 ? 0x1358 : ge > 69 ? 0x1352 : 0x1355)
+                : (ge < 31 ? 0x1357 : ge < 70 ? 0x1354 : 0x1351);
+        c.alignment = Tlk(ref);
+        bool up = true;
+        for (auto& ch : c.alignment) { if (up && ch >= 'a' && ch <= 'z') ch = (char)(ch - 32); up = ch == ' '; }
+    }
+    // attacks: base attack per attack minus the iterative penalty, plus the hand's modifier, the combat mode
+    // and the unconditional bonuses (as CNWCCreatureStats::GetGeneralAttackBonusString)
+    if (char* ci = F<char*>(st, 0xa8)) {
+        c.sr = (uint8_t)ci[5]; c.asf = (uint8_t)ci[6]; c.acp = (uint8_t)ci[7];
+        typedef int (*fi)(void*, int);
+        typedef int (*f1)(void*);
+        typedef int (*fm)(void*, void*);
+        int mode = ((fm)A(0x1407f0a60))(st, cre);
+        auto general = [&](bool off) {
+            int sum = 0;
+            void** nodes = F<void**>(ci, 0x20); int n = F<int>(ci, 0x28);
+            for (int i = 0; nodes && i < n && i < 64; i++) {
+                char* nd = (char*)nodes[i];
+                if (!nd) continue;
+                uint8_t t = (uint8_t)nd[2];
+                bool kind = (uint8_t)(t - 1) < 2 || (uint8_t)(t - 6) < 2;
+                if (!kind || (uint8_t)nd[5] != 0x1c || nd[3] || nd[4]) continue;
+                if (off ? t == 1 : t == 2) continue;
+                sum += nd[0];
+            }
+            return sum;
+        };
+        auto list = [&](int count, int handMod, bool off) {
+            std::string r;
+            int add = handMod + mode + general(off);
+            for (int i = 0; i < count && i < 8; i++) {
+                int v = ((fi)A(0x1407f5090))(st, i) + add;
+                char b[16]; snprintf(b, sizeof b, "%s%+d", i ? "/" : "", v);
+                r += b;
+            }
+            return r;
+        };
+        c.attack = list(((f1)A(0x1407f51c0))(st), (signed char)ci[1], false);
+        int off = ((f1)A(0x1407f5150))(st);
+        if (off > 0) c.attackOff = list(off, (signed char)ci[3], true);
+    }
     c.ok = true;
     return c;
+}
+
+std::vector<SkillInfo> Skills(void* cre) {
+    std::vector<SkillInfo> v;
+    void* st = cre ? F<void*>(cre, OFS::Cre_Stats) : nullptr;
+    void* rules = Rules();
+    if (!st || !rules) return v;
+    int n = F<uint8_t>(rules, 0x107);
+    uint8_t* ranks = F<uint8_t*>(st, 0xd0);
+    const TwoDA& t = TDA("skills");
+    typedef char (*fm)(void*, uint16_t);
+    // single player: the server's own numbers (feats, items and effects included)
+    static HMODULE exe = GetModuleHandleA(nullptr);
+    static auto fCre = (void* (*)(void*, uint32_t))GetProcAddress(exe, "?GetCreatureByGameObjectID@CServerExoApp@@QEAAPEAVCNWSCreature@@I@Z");
+    static auto fRank = (char (*)(void*, uint8_t, void*, int))GetProcAddress(exe, "?GetSkillRank@CNWSCreatureStats@@QEAADEPEAVCNWSObject@@H@Z");
+    static void** am = (void**)GetProcAddress(exe, "?g_pAppManager@@3PEAVCAppManager@@EA");
+    void* srv = am && *am ? F<void*>(*am, 8) : nullptr;
+    void* sst = nullptr;
+    if (srv && F<void*>(srv, 8) && !Loading() && fCre && fRank)
+        if (void* sc = fCre(srv, Id(cre) & 0x7fffffffu)) sst = F<void*>(sc, 0xad0);
+    for (int i = 0; i < n && i < 64; i++) {
+        SkillInfo s;
+        s.id = i;
+        if (sst) {
+            s.rank = fRank(sst, (uint8_t)i, nullptr, 1);
+            s.total = fRank(sst, (uint8_t)i, nullptr, 0);
+        } else {
+            s.rank = ranks && !F<int>(st, 0x110) ? ranks[i] : 0;
+            s.total = s.rank + ((fm)A(0x1407f5510))(st, (uint16_t)i);
+        }
+        int nm = t.Int(i, "Name", -1);
+        if (nm < 0) continue;
+        s.name = Tlk(nm);
+        int ds = t.Int(i, "Description", -1);
+        if (ds >= 0) s.desc = Tlk(ds);
+        s.trainedOnly = t.Int(i, "Untrained", 1) == 0;
+        if (s.name.empty() || (s.trainedOnly && s.rank == 0)) continue;
+        v.push_back(s);
+    }
+    std::sort(v.begin(), v.end(), [](const SkillInfo& a, const SkillInfo& b) { return a.name < b.name; });
+    return v;
+}
+
+std::vector<FeatInfo> Feats(void* cre) {
+    std::vector<FeatInfo> v;
+    void* st = cre ? F<void*>(cre, OFS::Cre_Stats) : nullptr;
+    if (!st) return v;
+    uint16_t* ids = F<uint16_t*>(st, 0x118);
+    int n = F<int>(st, 0x120);
+    const TwoDA& t = TDA("feat");
+    for (int i = 0; ids && i < n && i < 1000; i++) {
+        FeatInfo f; f.id = ids[i];
+        int nm = t.Int(f.id, "FEAT", -1);
+        if (nm < 0) continue;
+        f.name = Tlk(nm);
+        int ds = t.Int(f.id, "DESCRIPTION", -1);
+        if (ds >= 0) f.desc = Tlk(ds);
+        if (!f.name.empty()) v.push_back(f);
+    }
+    std::sort(v.begin(), v.end(), [](const FeatInfo& a, const FeatInfo& b) { return a.name < b.name; });
+    return v;
+}
+Load Encumbrance(void* cre, int itemsWeight, int str) {
+    Load l; l.weight = itemsWeight; l.str = str;
+    static HMODULE exe = GetModuleHandleA(nullptr);
+    static auto fCre = (void* (*)(void*, uint32_t))GetProcAddress(exe, "?GetCreatureByGameObjectID@CServerExoApp@@QEAAPEAVCNWSCreature@@I@Z");
+    static void** am = (void**)GetProcAddress(exe, "?g_pAppManager@@3PEAVCAppManager@@EA");
+    void* srv = am && *am ? F<void*>(*am, 8) : nullptr;
+    if (cre && srv && F<void*>(srv, 8) && !Loading() && fCre) {
+        if (void* sc = fCre(srv, Id(cre) & 0x7fffffffu)) {
+            typedef int (*fn)(void*);
+            l.weight = ((fn)A(0x140387320))(sc);             // CNWSCreature::ComputeTotalWeightCarried
+        }
+    }
+    const TwoDA& t = TDA("encumbrance");
+    int row = std::max(0, str);
+    l.normal = t.Int(row, "Normal", 0);
+    l.heavy = t.Int(row, "Heavy", 0);
+    return l;
 }
 }  // namespace Inv

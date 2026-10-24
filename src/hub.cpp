@@ -56,7 +56,10 @@ struct HubState {
     double lastGather = -10;
     std::string toast; double toastTime = -10;
     Inv::CharInfo ch; double lastChar = -10;
+    int chPage = 0, chSel = 0, chScroll = 0;      // character: overview / skills / feats
+    std::vector<Inv::SkillInfo> skills; std::vector<Inv::FeatInfo> feats;
     int qbBank = 0, qbSlot = 0;
+    uint32_t qbPlace = 0; std::string qbPlaceName;   // item waiting for a quick slot
     uint32_t descId = 0; float descScroll = 0;
     int sortMode = 0;            // 0 backpack order, 1 name, 2 type, 3 value, 4 weight
     bool grid = true;            // backpack as a grid of item footprints (like the original) or a list
@@ -231,9 +234,9 @@ void MoveGrid(int dr, int dc) {
 }
 
 // ---- item actions ----------------------------------------------------------------------------
-enum ItemAct { IA_EQUIP, IA_USE, IA_SPLIT, IA_MERGE, IA_OPEN, IA_TOBAG, IA_DROP, IA_EXAMINE, IA_MORE, IA_GIVE };
+enum ItemAct { IA_EQUIP, IA_USE, IA_SPLIT, IA_MERGE, IA_OPEN, IA_TOBAG, IA_DROP, IA_EXAMINE, IA_MORE, IA_GIVE, IA_QUICK };
 const char* ActName(int a) {
-    static const char* N[] = {"Equip", "Use", "Split stack", "Combine stacks", "Open", "Put in a bag", "Drop", "Examine", "More actions", "Give to ..."};
+    static const char* N[] = {"Equip", "Use", "Split stack", "Combine stacks", "Open", "Put in a bag", "Drop", "Examine", "More actions", "Give to ...", "Put on quickbar"};
     return N[a];
 }
 const InvItem* FindPack(uint32_t id) {
@@ -261,6 +264,7 @@ void OpenActions(const InvItem& it) {
         HS.acts.push_back(IA_GIVE);
         HS.acts.push_back(IA_DROP);
     }
+    if (!Inv::IsContainer(it)) HS.acts.push_back(IA_QUICK);
     HS.acts.push_back(IA_EXAMINE);
     HS.acts.push_back(IA_MORE);
     HS.actSel = 0;
@@ -293,6 +297,7 @@ void DoAction(int a) {
     case IA_EXAMINE: Inv::Examine(pl, c.id); break;
     case IA_GIVE: Hub_Close(); Control_StartGive(c.id, c.name.c_str()); return;
     case IA_MORE: CenterMouse(); Inv::OpenRadial(c.id); break;
+    case IA_QUICK: HS.qbPlace = c.id; HS.qbPlaceName = c.name; SwitchTab(2); return;
     }
     HS.lastGather = g_pad.now - 0.15;
 }
@@ -477,6 +482,20 @@ void InventoryInput() {
 }
 
 void QuickbarInput() {
+    if (HS.qbPlace) {                                   // choosing the slot for an inventory item
+        if (g_pad.Repeat(PB_DLEFT) || g_pad.Repeat(PB_LLEFT)) HS.qbSlot = (HS.qbSlot + 11) % 12;
+        if (g_pad.Repeat(PB_DRIGHT) || g_pad.Repeat(PB_LRIGHT)) HS.qbSlot = (HS.qbSlot + 1) % 12;
+        if (g_pad.Repeat(PB_DUP) || g_pad.Repeat(PB_LUP)) HS.qbBank = (HS.qbBank + 2) % 3;
+        if (g_pad.Repeat(PB_DDOWN) || g_pad.Repeat(PB_LDOWN)) HS.qbBank = (HS.qbBank + 1) % 3;
+        if (g_pad.Pressed(PB_A)) {
+            uint32_t id = HS.qbPlace; HS.qbPlace = 0;
+            static const char* setN[3] = {"I", "II", "III"};
+            if (QB_SetItem(HS.qbBank, HS.qbSlot, id)) Toast(HS.qbPlaceName + " on set " + setN[HS.qbBank] + ", slot " + std::to_string(HS.qbSlot + 1));
+            else Toast(HS.qbPlaceName + " can't go on the quickbar");
+            SwitchTab(0);
+        } else if (g_pad.Pressed(PB_B)) { HS.qbPlace = 0; SwitchTab(0); }
+        return;
+    }
     if (g_pad.Repeat(PB_DLEFT) || g_pad.Repeat(PB_LLEFT)) HS.qbSlot = (HS.qbSlot + 11) % 12;
     if (g_pad.Repeat(PB_DRIGHT) || g_pad.Repeat(PB_LRIGHT)) HS.qbSlot = (HS.qbSlot + 1) % 12;
     if (g_pad.Repeat(PB_DUP) || g_pad.Repeat(PB_LUP)) HS.qbBank = (HS.qbBank + 2) % 3;
@@ -497,6 +516,20 @@ void CharacterInput() {
         ((fn)A(0x1406f5c20))();          // CGuiInGame::HandleLevelUpButton
         Log("hub: level up");
         return;
+    }
+    if (g_pad.Pressed(PB_LT) || g_pad.Pressed(PB_RT)) {
+        HS.chPage = (HS.chPage + (g_pad.Pressed(PB_RT) ? 1 : 2)) % 3;
+        HS.chSel = 0; HS.chScroll = 0; HS.descScroll = 0; HS.lastChar = -10;
+    }
+    if (HS.chPage > 0) {
+        int n = HS.chPage == 1 ? (int)HS.skills.size() : (int)HS.feats.size();
+        int old = HS.chSel;
+        if (g_pad.Repeat(PB_DUP) || g_pad.Repeat(PB_LUP)) HS.chSel = std::max(0, HS.chSel - 1);
+        if (g_pad.Repeat(PB_DDOWN) || g_pad.Repeat(PB_LDOWN)) HS.chSel = std::min(std::max(0, n - 1), HS.chSel + 1);
+        if (g_pad.Repeat(PB_DLEFT)) HS.chSel = std::max(0, HS.chSel - 10);
+        if (g_pad.Repeat(PB_DRIGHT)) HS.chSel = std::min(std::max(0, n - 1), HS.chSel + 10);
+        if (old != HS.chSel) HS.descScroll = 0;
+        if (fabsf(g_pad.ry) > 0.2f) HS.descScroll = std::max(0.0f, HS.descScroll - g_pad.ry * px(700.0f) * (float)g_pad.dt);
     }
     if (g_pad.Pressed(PB_A)) OpenExternal(HS.tab, 0x42);
     if (g_pad.Pressed(PB_Y)) { Hub_Close(); FireEvent(0x6b); }    // rest
@@ -581,7 +614,41 @@ void DrawInventory(float x, float y, float w, float h, float a) {
     std::string title = HS.filterSlot >= 0 ? std::string("Backpack  ·  ") + Inv::SlotName(HS.filterSlot)
                       : HS.sortMode ? std::string("Backpack  ·  by ") + SORT_NAMES[HS.sortMode] : std::string("Backpack");
     SectionTitle(lx, ly, title.c_str(), a);
-    TextRight(FONT_BODY, px(20), lx + lw, ly + px(2), Fmt((int)g_list.size() == 1 ? "%d item" : "%d items", (int)g_list.size()).c_str(), Theme::TextFaint.alpha(a));
+    {
+        // carried weight against the strength limits
+        static Inv::Load load; static double lt = -10;
+        if (g_pad.now - lt > 0.5) {
+            lt = g_pad.now;
+            int sum = 0;
+            for (auto& it : HS.pack) sum += it.weight;
+            for (auto& it : HS.eq) if (it.item) sum += it.weight;
+            if (g_pad.now - HS.lastChar > 2.0) { HS.ch = Inv::Character(Player()); HS.lastChar = g_pad.now; }
+            load = Inv::Encumbrance(Player(), sum, HS.ch.ab[0]);
+        }
+        char wb[96];
+        snprintf(wb, sizeof wb, "%.1f / %d lb", load.weight / 10.0f, load.normal / 10);
+        bool heavy = load.heavy > 0 && load.weight > load.heavy, enc = load.normal > 0 && load.weight > load.normal;
+        Col wc = heavy ? Col(240, 100, 80) : enc ? Col(240, 200, 90) : Theme::TextDim;
+        float rx = lx + lw;
+        float tw = TextWidth(FONT_BODY_BOLD, px(20), wb);
+        Text(FONT_BODY_BOLD, px(20), rx - tw, ly + px(2), wb, wc.alpha(a));
+        rx -= tw + px(10);
+        const char* st = heavy ? "Overloaded" : enc ? "Encumbered" : "Weight";
+        float sw = TextWidth(FONT_BODY, px(18), st);
+        Text(FONT_BODY, px(18), rx - sw, ly + px(4), st, (heavy || enc ? wc : Theme::TextFaint).alpha(a));
+        rx -= sw + px(26);
+        std::string cnt = Fmt((int)g_list.size() == 1 ? "%d item" : "%d items", (int)g_list.size());
+        TextRight(FONT_BODY, px(18), rx, ly + px(4), cnt.c_str(), Theme::TextFaint.alpha(a));
+        // fill bar under the title: normal limit at 2/3, heavy at the end
+        if (load.heavy > 0) {
+            float bw = px(180), bx = lx + lw - bw, by = ly + px(30);
+            float f = std::min(1.0f, load.weight / (float)load.heavy);
+            RoundRect(bx, by, bw, px(4), px(2), Col(40, 34, 28, (int)(200 * a)));
+            RoundRect(bx, by, bw * f, px(4), px(2), (heavy ? Col(240, 100, 80) : enc ? Col(240, 200, 90) : Col(150, 190, 120)).alpha(a));
+            float nx = bx + bw * (load.normal / (float)load.heavy);
+            RoundRect(nx - px(1), by - px(3), px(2), px(10), 0, Theme::TextDim.alpha(a));
+        }
+    }
     ly += px(40);
     float lh = h - (ly - y) - px(20);
     int n = (int)g_list.size();
@@ -751,55 +818,130 @@ void StatLine(float x, float y, float w, const char* k, const std::string& v, fl
     RoundRect(x, y + px(34), w, px(1), 0, Theme::Line.alpha(0.25f * a));
 }
 
+std::string Signed(int v) { char b[16]; snprintf(b, sizeof b, "%+d", v); return b; }
+
+// one scrolling list with a description of the selected entry on the right (skills, feats)
+void DrawSheetList(float x, float y, float w, float h, float a, const std::vector<std::pair<std::string, std::string>>& rows,
+                   const std::string& desc, const char* empty) {
+    float lw = w * 0.52f, rowH = px(40);
+    int vis = std::max(1, (int)((h - px(10)) / rowH));
+    int n = (int)rows.size();
+    if (n == 0) { Text(FONT_BODY, px(22), x, y + px(10), empty, Theme::TextFaint.alpha(a)); return; }
+    HS.chSel = std::max(0, std::min(HS.chSel, n - 1));
+    if (HS.chSel < HS.chScroll) HS.chScroll = HS.chSel;
+    if (HS.chSel >= HS.chScroll + vis) HS.chScroll = HS.chSel - vis + 1;
+    for (int k = 0; k < vis && HS.chScroll + k < n; k++) {
+        int i = HS.chScroll + k;
+        float ry = y + k * rowH;
+        bool sel = i == HS.chSel;
+        if (sel) RoundRect(x - px(10), ry - px(4), lw + px(20), rowH - px(4), px(8), Theme::GoldDim.alpha(0.22f * a));
+        TextFit(FONT_BODY, px(21), x, ry + px(2), lw - px(130), rows[i].first.c_str(), (sel ? Theme::Gold : Theme::Text).alpha(a));
+        TextRight(FONT_BODY_BOLD, px(21), x + lw, ry + px(2), rows[i].second.c_str(), Theme::Text.alpha(a));
+    }
+    if (n > vis) {                                      // scroll bar
+        float bh = h * vis / n, by = y + (h - bh) * HS.chScroll / std::max(1, n - vis);
+        RoundRect(x + lw + px(18), by, px(3), bh, px(2), Theme::Line.alpha(0.6f * a));
+    }
+    float dx = x + lw + px(50), dw = w - lw - px(50);
+    Text(FONT_TITLE, px(26), dx, y, rows[HS.chSel].first.c_str(), Theme::Gold.alpha(a));
+    PushClip(dx, y + px(44), dw, h - px(44));
+    TextWrap(FONT_BODY, px(19), dx, y + px(46) - HS.descScroll, dw, desc.c_str(), Theme::TextDim.alpha(a));
+    PopClip();
+}
+
 void DrawCharacter(float x, float y, float w, float h, float a) {
     void* pl = Player();
-    if (g_pad.now - HS.lastChar > 0.5) { HS.ch = Inv::Character(pl); HS.lastChar = g_pad.now; }
+    if (g_pad.now - HS.lastChar > 0.5) {
+        HS.ch = Inv::Character(pl); HS.lastChar = g_pad.now;
+        if (HS.chPage == 1) HS.skills = Inv::Skills(pl);
+        if (HS.chPage == 2) HS.feats = Inv::Feats(pl);
+    }
     const Inv::CharInfo& c = HS.ch;
     if (!c.ok) return;
     // portrait
-    float pw = px(260), ph = px(406);
+    float pw = px(240), ph = px(375);
     float pxl = x + px(40), pyl = y + px(28);
     uint32_t tex = pl ? GD::PortraitTex(pl, 'h') : 0;
     if (!tex && pl) tex = GD::PortraitTex(pl, 'l');
     RoundRect(pxl, pyl, pw, ph, px(14), Col(0, 0, 0, (int)(120 * a)));
     if (tex) ImageRounded(tex, pxl, pyl, pw, ph, px(14), Col(255, 255, 255, (int)(255 * a)), 0, 0, 1, 0.78f);
     RoundRectBorder(pxl, pyl, pw, ph, px(14), px(1.5f), Theme::Line.alpha(a));
-    // identity
-    float ix = pxl + pw + px(40), iw = w - (ix - x) - px(40);
-    float iy = y + px(24);
-    Text(FONT_TITLE, px(40), ix, iy, c.name.c_str(), Theme::Gold.alpha(a));
-    iy += px(56);
-    std::string line = c.race + "   ·   " + c.classes;
-    TextFit(FONT_BODY, px(24), ix, iy, iw, line.c_str(), Theme::TextDim.alpha(a));
-    iy += px(44);
-    // level + xp bar
-    Text(FONT_BODY_BOLD, px(22), ix, iy, Fmt("Level %d", c.level).c_str(), Theme::Text.alpha(a));
-    std::string xpS = std::to_string(c.xp) + " / " + std::to_string(c.xpNext) + " XP";
-    TextRight(FONT_BODY, px(20), ix + iw, iy + px(2), xpS.c_str(), Theme::TextDim.alpha(a));
-    iy += px(34);
+    // under the portrait: level, experience, alignment
+    float uy = pyl + ph + px(18);
+    Text(FONT_BODY_BOLD, px(21), pxl, uy, Fmt("Level %d", c.level).c_str(), Theme::Text.alpha(a));
+    TextRight(FONT_BODY, px(18), pxl + pw, uy + px(2), (std::to_string(c.xp) + " / " + std::to_string(c.xpNext) + " XP").c_str(), Theme::TextDim.alpha(a));
+    uy += px(30);
     float xf = c.xpNext > c.xpCur ? (float)(c.xp - c.xpCur) / (float)(c.xpNext - c.xpCur) : 1.0f;
-    UIK::Bar(ix, iy, iw, px(12), xf, Col(196, 160, 80), Col(30, 26, 20, (int)(220 * a)));
-    if (LevelUpReady()) {
-        iy += px(20);
-        float lw = Text(FONT_BODY_BOLD, px(20), ix, iy, "Level up available", Theme::Friendly.alpha(a));
-        UIK::Hint(GL_X, "Level up", ix + lw + px(24), iy - px(4), px(26), a);
+    UIK::Bar(pxl, uy, pw, px(10), xf, Col(196, 160, 80), Col(30, 26, 20, (int)(220 * a)));
+    uy += px(22);
+    if (LevelUpReady()) UIK::Hint(GL_X, "Level up", pxl, uy, px(26), a);
+    // identity + page selector
+    float ix = pxl + pw + px(40), iw = w - (ix - x) - px(40);
+    float iy = y + px(20);
+    Text(FONT_TITLE, px(36), ix, iy, c.name.c_str(), Theme::Gold.alpha(a));
+    {
+        static const char* P[3] = {"Overview", "Skills", "Feats"};
+        float tx = ix + iw;
+        float gs = px(26);
+        tx -= gs * 1.45f; UIK::Glyph(GL_RT, tx, iy + px(6), gs, a); tx -= px(14);
+        for (int i = 2; i >= 0; i--) {
+            float tw = TextWidth(FONT_TITLE, px(21), P[i]);
+            tx -= tw;
+            Text(FONT_TITLE, px(21), tx, iy + px(8), P[i], (i == HS.chPage ? Theme::Gold : Theme::TextFaint).alpha(a));
+            if (i == HS.chPage) RoundRect(tx, iy + px(38), tw, px(2), 0, Theme::Gold.alpha(a));
+            tx -= px(22);
+        }
+        tx -= gs * 1.45f - px(8); UIK::Glyph(GL_LT, tx, iy + px(6), gs, a);
     }
-    iy += px(40);
-    // abilities
+    iy += px(50);
+    std::string line = c.race + "   ·   " + c.alignment + "   ·   " + c.classes;
+    TextFit(FONT_BODY, px(22), ix, iy, iw, line.c_str(), Theme::TextDim.alpha(a));
+    iy += px(44);
+    float rest = h - (iy - y) - px(20);
+    if (HS.chPage == 1) {
+        std::vector<std::pair<std::string, std::string>> rows;
+        for (auto& s : HS.skills) rows.push_back({s.name, Signed(s.total) + (s.rank ? Fmt("   (%d ranks)", s.rank) : std::string("   (untrained)"))});
+        DrawSheetList(ix, iy, iw, rest, a, rows, rows.empty() ? "" : HS.skills[std::min(HS.chSel, (int)HS.skills.size() - 1)].desc, "No skills.");
+        return;
+    }
+    if (HS.chPage == 2) {
+        std::vector<std::pair<std::string, std::string>> rows;
+        for (auto& f : HS.feats) rows.push_back({f.name, ""});
+        DrawSheetList(ix, iy, iw, rest, a, rows, rows.empty() ? "" : HS.feats[std::min(HS.chSel, (int)HS.feats.size() - 1)].desc, "No feats.");
+        return;
+    }
+    // abilities: total, modifier, and the score without item / spell bonuses when it differs
     static const char* AB[6] = {"STR", "DEX", "CON", "INT", "WIS", "CHA"};
     float bw = (iw - px(14) * 5) / 6;
-    for (int i = 0; i < 6; i++) AbilityBox(ix + i * (bw + px(14)), iy, bw, AB[i], c.ab[i], a);
-    iy += px(136);
-    // combat block
-    float cw = (iw - px(40)) * 0.5f;
-    StatLine(ix, iy, cw, "Hit points", std::to_string(c.hp) + " / " + std::to_string(c.hpMax), a);
-    StatLine(ix + cw + px(40), iy, cw, "Armour class", std::to_string(c.ac), a);
-    iy += px(48);
-    StatLine(ix, iy, cw, "Base attack", "+" + std::to_string(c.bab), a);
-    StatLine(ix + cw + px(40), iy, cw, "Gold", std::to_string(c.gold), a);
-    iy += px(60);
-    float hw = UIK::Hint(GL_A, "Full character sheet", ix, iy, px(30), a);
-    UIK::Hint(GL_Y, "Rest", ix + hw + px(40), iy, px(30), a);
+    for (int i = 0; i < 6; i++) {
+        float bx = ix + i * (bw + px(14)), bh = px(100);
+        RoundRect(bx, iy, bw, bh, px(12), Col(8, 7, 6, (int)(150 * a)));
+        RoundRectBorder(bx, iy, bw, bh, px(12), px(1), Theme::Line.alpha(0.4f * a));
+        TextCentered(FONT_TITLE, px(17), bx + bw * 0.5f, iy + px(8), AB[i], Theme::GoldDim.alpha(a));
+        bool boosted = c.ab[i] != c.abBase[i];
+        TextCentered(FONT_TITLE, px(36), bx + bw * 0.5f, iy + px(28), Fmt("%d", c.ab[i]).c_str(), (boosted ? (c.ab[i] > c.abBase[i] ? Theme::Friendly : Theme::Hostile) : Theme::Text).alpha(a));
+        int m = (int)floorf((c.ab[i] - 10) / 2.0f);
+        std::string sub = Signed(m);
+        if (boosted) sub += Fmt("   base %d", c.abBase[i]);
+        TextCentered(FONT_BODY_BOLD, px(16), bx + bw * 0.5f, iy + px(72), sub.c_str(), Theme::TextDim.alpha(a));
+    }
+    iy += px(118);
+    // combat and defences, two columns
+    float cw = (iw - px(40)) * 0.5f, c2 = ix + cw + px(40), rh = px(42);
+    auto L = [&](int row, int col, const char* k, const std::string& v) { StatLine(col ? c2 : ix, iy + row * rh, cw, k, v, a); };
+    L(0, 0, "Hit points", std::to_string(c.hp) + " / " + std::to_string(c.hpMax));
+    L(1, 0, "Armour class", std::to_string(c.ac));
+    L(2, 0, "Base attack", Signed(c.bab));
+    L(3, 0, "Attack", c.attack.empty() ? Signed(c.bab) : c.attack);
+    if (!c.attackOff.empty()) L(4, 0, "Off-hand attack", c.attackOff);
+    else L(4, 0, "Gold", std::to_string(c.gold));
+    L(0, 1, "Fortitude", c.sheet ? Signed(c.fort) : "-");
+    L(1, 1, "Reflex", c.sheet ? Signed(c.ref) : "-");
+    L(2, 1, "Will", c.sheet ? Signed(c.will) : "-");
+    L(3, 1, "Spell resistance", std::to_string(c.sr));
+    L(4, 1, "Spell failure / check penalty", Fmt("%d%%", c.asf) + "  /  " + (c.acp ? Fmt("-%d", c.acp) : std::string("0")));
+    iy += rh * 5 + px(14);
+    if (!c.attackOff.empty()) { StatLine(ix, iy, cw, "Gold", std::to_string(c.gold), a); }
 }
 void DrawBinding(int slot, float cx, float y, float size, float a) {
     int mod, btn; QB_Binding(slot, mod, btn);
@@ -837,7 +979,8 @@ void DrawQuickbar(float x, float y, float w, float h, float a) {
             RoundRectBorder(tx, ry, tile, tile, px(10), px(1), Theme::Line.alpha((act ? 0.55f : 0.3f) * a));
             bool dis = false;
             uint32_t tex = QB_Icon(b, s, &dis);
-            if (tex) ImageRounded(tex, tx + tile * 0.1f, ry + tile * 0.1f, tile * 0.8f, tile * 0.8f, px(8), (dis ? Col(120, 120, 120) : Col(255, 255, 255)).alpha(a));
+            if (QB_DrawItem(b, s, tx + tile * 0.1f, ry + tile * 0.1f, tile * 0.8f, (dis ? 0.5f : 1.0f) * a)) {}
+            else if (tex) ImageRounded(tex, tx + tile * 0.1f, ry + tile * 0.1f, tile * 0.8f, tile * 0.8f, px(8), (dis ? Col(120, 120, 120) : Col(255, 255, 255)).alpha(a));
             else if (!QB_Empty(b, s)) TextCentered(FONT_TITLE, px(28), tx + tile * 0.5f, ry + tile * 0.28f, "?", Theme::GoldDim.alpha(a));
             int ms = QB_ModeState(b, s);
             if (ms == 2) RoundRectBorder(tx + px(2), ry + px(2), tile - px(4), tile - px(4), px(9), px(3), Col(255, 196, 70).alpha(a));
@@ -862,6 +1005,11 @@ void DrawQuickbar(float x, float y, float w, float h, float a) {
     Text(FONT_BODY, px(21), bx, dy, where.c_str(), Theme::TextDim.alpha(a));
     DrawBinding(HS.qbSlot, bx + ww + px(60), dy - px(2), px(26), a);
     dy += px(46);
+    if (HS.qbPlace) {
+        std::string t = "Choose a slot for " + HS.qbPlaceName + (nm.empty() ? "" : "  (replaces what is there; a weapon on a weapon makes a pair)");
+        TextWrap(FONT_BODY_BOLD, px(21), bx, dy, w - px(160), t.c_str(), Theme::Friendly.alpha(a));
+        return;
+    }
     TextWrap(FONT_BODY, px(19), bx, dy, w - px(160),
              "Assign opens the game's quickbar menu: attack, special attacks, abilities, spells, party commands, actions and "
              "emotes; choose with the stick, A to pick, Y back. "
@@ -989,9 +1137,15 @@ void Hub_Draw() {
         hints[n++] = {GL_L3, "Sort"};
         hints[n++] = {GL_BACK, HS.grid ? "List" : "Grid"};
     } else if (HS.tab == 1) {
+        hints[n++] = {GL_LT, "Page"};
+        if (HS.chPage > 0) hints[n++] = {GL_DPAD, "Choose"};
         if (LevelUpReady()) hints[n++] = {GL_X, "Level up"};
-        hints[n++] = {GL_A, "Character sheet"};
+        hints[n++] = {GL_A, "Game's sheet"};
         hints[n++] = {GL_Y, "Rest"};
+    } else if (HS.tab == 2 && HS.qbPlace) {
+        hints[n++] = {GL_DPAD, "Move"};
+        hints[n++] = {GL_A, "Put here"};
+        hints[n++] = {GL_B, "Cancel"};
     } else if (HS.tab == 2) {
         hints[n++] = {GL_DPAD, "Move"};
         hints[n++] = {GL_A, "Assign"};
@@ -1023,6 +1177,22 @@ void Hub_DevUse(const char* want, bool equip) {
     Log("dev: no item matching '%s'", want);
 }
 
+
+// developer: put the first backpack / equipped item whose name contains the text on a quick slot of the active set
+void Hub_DevQuick(int slot, const char* want) {
+    void* pl = Player();
+    if (!pl) return;
+    std::vector<InvItem> pack; InvItem eq[ES_TOTAL];
+    Inv::Gather(pl, pack, eq);
+    for (auto& e : eq) if (e.item) pack.push_back(e);
+    for (auto& it : pack) {
+        std::string l = it.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
+        if (l.find(want) == std::string::npos) continue;
+        Log("dev: qbitem %d %08x '%s' -> %d", slot, it.id, it.name.c_str(), QB_SetItem(g_ctl.quickBank, slot, it.id));
+        return;
+    }
+    Log("dev: no item matching '%s'", want);
+}
 
 std::string Hub_DebugState() {
     if (!HS.open) return "closed";

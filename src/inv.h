@@ -79,6 +79,20 @@ struct CharInfo {
     int ab[6] = {};      // STR DEX CON INT WIS CHA
     int hp = 0, hpMax = 0, gold = 0;
     bool ok = false;
+    // full sheet (the server sends these while the character sheet is open)
+    bool sheet = false;      // ability scores / saves / combat information arrived
+    int abBase[6] = {};      // without bonuses from items and effects
+    int fort = 0, ref = 0, will = 0;
+    std::string alignment, attack, attackOff;
+    int sr = 0, asf = 0, acp = 0;
 };
+struct SkillInfo { int id; std::string name, desc; int rank, total; bool trainedOnly; };
+struct FeatInfo { int id; std::string name, desc; };
+std::vector<SkillInfo> Skills(void* creature);
+std::vector<FeatInfo> Feats(void* creature);
 CharInfo Character(void* creature);
+// carried weight (tenths of a pound; the server's own total in single player, else the sum of the items)
+// and the encumbrance.2da limits for the hero's strength: above normal slows, above heavy stops
+struct Load { int weight = 0, normal = 0, heavy = 0, str = 0; };
+Load Encumbrance(void* creature, int itemsWeight, int str);
 }

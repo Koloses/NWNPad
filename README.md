@@ -112,11 +112,19 @@ LB / RB switch tabs: Inventory, Character, Quickbar, Spells, Journal, Map, Syste
   A on a backpack item equips it (or uses it; A on a bag opens it). X opens the item menu:
   equip, use, split stack (d-pad sets the amount, LT / RT min / max), combine stacks, open,
   put in a bag, drop, examine, more actions (the game's wheel). Y examines, left stick click
-  cycles the backpack order (as carried, name, type, value, weight). Items your character
+  cycles the backpack order (as carried, name, type, value, weight). Above the backpack: carried
+  weight against what your strength allows (encumbrance.2da), yellow when encumbered (slower), red
+  when overloaded. "Put on quickbar" in the item menu picks a quick slot for the item, as dragging it
+  there does: a potion / scroll / wand slot uses it, a weapon or shield slot swaps it in (a weapon
+  placed on a weapon slot makes a pair, e.g. sword and shield). Items your character
   cannot use (class, race, alignment, feats, ability scores) have a red background, the details
   say so, and equipping them is refused.
-* **Character** - abilities, hit points, armour class, attack bonus, experience, gold.
-  A opens the full character sheet, X levels up when available, Y rests.
+* **Character** - LT / RT switch pages. Overview: race, alignment, classes, level and experience,
+  ability scores with modifiers (green / red when items or spells change them, with the base value),
+  hit points, armour class, base attack, attacks per round (main and off hand), saving throws, spell
+  resistance, arcane spell failure, armour check penalty, gold. Skills: every skill you can use with
+  its total and ranks, description on the right. Feats: all feats with descriptions. A opens the
+  game's own sheet, X levels up when available, Y rests.
 * **Quickbar** - all 36 slots with the button that triggers each one. A opens the game's
   full assign wheel for the slot, also on a filled slot (attack, special attacks, abilities, cast,
   party commands, actions, emotes; the slot keeps its content if nothing is picked), X uses the
