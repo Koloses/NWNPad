@@ -664,6 +664,15 @@ static void DevCommands(void* player) {
         void Hub_DevUse(const char*, bool); Hub_DevUse(want.c_str(), eq);
         return;
     }
+    if (strncmp(line, "itemdump ", 9) == 0) {  // itemdump <hex id>: raw fields of a client item (tests)
+        uint32_t id = (uint32_t)strtoul(line + 9, nullptr, 16);
+        void* it = GetObj(id);
+        if (!it) { Log("dev: itemdump %08x: no object", id); return; }
+        std::string h; char b[16];
+        for (int o = 0; o < 0x2a0; o += 4) { snprintf(b, sizeof b, "%s%08x", o % 32 ? " " : "\n", F<uint32_t>(it, o)); h += b; }
+        Log("dev: itemdump %08x area %p:%s", id, F<void*>(it, OFS::Obj_Area), h.c_str());
+        return;
+    }
     if (strncmp(line, "hubsel ", 7) == 0) {   // hubsel <name>: select a backpack item in the hub (tests)
         std::string w = line + 7; while (!w.empty() && (w.back() == '\r' || w.back() == '\n')) w.pop_back();
         for (auto& c : w) c = (char)tolower((unsigned char)c);

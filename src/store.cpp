@@ -199,7 +199,7 @@ void Refresh(bool force = false) {
         bool still = false;
         for (auto& it : SS.pack) if (it.id == g_sale.id) still = true;
         if (!still) { Toast("Sold " + g_sale.name); g_sale.id = 0; }
-        else if (g_pad.now - g_sale.t > 8.0) { Toast("The merchant did not take " + g_sale.name); Log("store: sale of %08x refused", g_sale.id); g_sale.id = 0; }
+        else if (g_pad.now - g_sale.t > (SrvApp() ? 1.5 : 8.0)) { Toast("The merchant did not take " + g_sale.name); Log("store: sale of %08x refused", g_sale.id); g_sale.id = 0; }
     }
     for (int c = 0; c < 2; c++) {
         auto& v = c ? SS.pack : SS.wares;

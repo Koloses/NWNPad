@@ -263,7 +263,7 @@ const int kPages = 6;                    // the creature repository is 10 x 36, 
 struct PageCache { bool seen = false; };
 PageCache g_pages[kPages];
 int g_curPage = -1, g_wantPage = -1;
-double g_reqTime = 0, g_walkDone = -1;
+double g_reqTime = 0;
 bool g_rescan = false;
 std::set<uint32_t> g_lastSet;
 std::map<uint32_t, int> g_pageOf;       // page an item was first sent with
@@ -271,7 +271,7 @@ double g_lastChange = 0;                // when the shown items last changed: a 
 uint32_t g_pagesFor = 0;
 bool g_invOpen = false;
 double NowS() { return GetTickCount64() / 1000.0; }
-void ResetPages() { for (auto& p : g_pages) p = PageCache(); g_pageOf.clear(); g_curPage = -1; g_wantPage = -1; g_walkDone = -1; }
+void ResetPages() { for (auto& p : g_pages) p = PageCache(); g_pageOf.clear(); g_curPage = -1; g_wantPage = -1; }
 void RequestPage(int p) {
     void* panel = InventoryPanel();
     if (!panel || p < 0 || p >= kPages) return;
@@ -293,11 +293,23 @@ void Gather(void* cre, std::vector<InvItem>& pack, InvItem equipped[ES_TOTAL]) {
         uint32_t id = EquippedId(cre, i);
         if (id != 0x7f000000 && Fill(id, equipped[i])) equipped[i].equippedSlot = i;
     }
+    // single player: the server's item says who holds it (the client keeps an item of a backpack page it is
+    // not being sent any more as it was: dropped, sold, given or used up)
+    static HMODULE exe = GetModuleHandleA(nullptr);
+    static auto fSrvItem = (void* (*)(void*, uint32_t))GetProcAddress(exe, "?GetItemByGameObjectID@CServerExoApp@@QEAAPEAVCNWSItem@@I@Z");
+    static void** am = (void**)GetProcAddress(exe, "?g_pAppManager@@3PEAVCAppManager@@EA");
+    void* srv = am && *am ? F<void*>(*am, 8) : nullptr;
+    bool local = srv && F<void*>(srv, 8) && fSrvItem && !Loading();
     ForEachItem([&](void* it) {
         if (F<uint32_t>(it, IT_Possessor) != cid) return;
         if (F<uint32_t>(it, IT_EquippedBy) == cid) return;
         if (F<int>(it, IT_InContainer) != 0) return;
+        if (F<void*>(it, OFS::Obj_Area)) return;                  // dropped: lying in the area now
         uint32_t id = F<uint32_t>(it, IT_Id);
+        if (local) {
+            void* si = fSrvItem(srv, id & 0x7fffffffu);
+            if (!si || F<uint32_t>(si, 0x3c8) != (cid & 0x7fffffffu)) return;   // CNWSItem possessor
+        }
         for (int i = 0; i < ES_TOTAL; i++) if (equipped[i].id == id) return;
         InvItem ii;
         if (!Fill(id, ii)) return;
@@ -310,8 +322,6 @@ void Gather(void* cre, std::vector<InvItem>& pack, InvItem equipped[ES_TOTAL]) {
     if (g_invOpen) {
         if (Id(cre) != g_pagesFor) { g_pagesFor = Id(cre); ResetPages(); }
         double now = NowS();
-        static void** am = (void**)GetProcAddress(GetModuleHandleA(nullptr), "?g_pAppManager@@3PEAVCAppManager@@EA");
-        bool local = am && *am && F<void*>(*am, 8) && F<void*>(F<void*>(*am, 8), 8);   // server in this process: answers at once
         if (g_wantPage >= 0) {
             std::set<uint32_t> ids; for (auto& it : pack) ids.insert(it.id);
             if (ids != g_lastSet) { g_lastSet = ids; g_lastChange = now; }
@@ -327,10 +337,10 @@ void Gather(void* cre, std::vector<InvItem>& pack, InvItem equipped[ES_TOTAL]) {
             for (int p = 0; p < kPages && next < 0; p++) if (!g_pages[p].seen) next = p;
             if (next >= 0) RequestPage(next);
             else if (g_curPage != 0) RequestPage(0);
-            else if (g_walkDone < 0) g_walkDone = now;
-            // walk again now and then: an item that left another page (dropped, sold, given, used up) is only
-            // taken off the client's list when that page is sent again
-            else if (now - g_walkDone > 4.0 || g_rescan) { for (auto& p : g_pages) p.seen = false; g_walkDone = -1; g_rescan = false; }
+            // online an item that left another page (given away, used up) is only taken off the client's list
+            // when that page is sent again: walk the pages again after the hero did something with an item
+            else if (g_rescan && !local) { for (auto& p : g_pages) p.seen = false; g_rescan = false; }
+            else g_rescan = false;
         }
     }
     for (auto& it : pack) { auto pg = g_pageOf.find(it.id); it.page = pg != g_pageOf.end() ? pg->second : 0; }
