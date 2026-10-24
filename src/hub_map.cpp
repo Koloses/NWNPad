@@ -102,7 +102,7 @@ void Input() {
     if (g_sel >= n) g_sel = n - 1;
     if (g_sel >= 0 && g_sel < n && ents[g_sel].quest && g_pad.Pressed(PB_A)) {
         const QuestMark& q = ents[g_sel].q;
-        Quest_Track(q.followed && Quest_FollowChosen() ? std::string() : q.tag);
+        if (q.followed) Quest_Untrack(); else Quest_Track(q.tag);
     }
     if (g_pad.Pressed(PB_Y)) { g_follow = true; g_sel = -1; }
     if (g_pad.Pressed(PB_X)) { g_zoom = 1.0f; g_follow = true; }
@@ -290,7 +290,7 @@ int Hints(HintItem* o) {
     void* ar = Area();
     if (ar && g_sel >= 0) {
         std::vector<Entry> e = Entries(ar);
-        if (g_sel < (int)e.size() && e[g_sel].quest) o[n++] = {GL_A, e[g_sel].q.followed && Quest_FollowChosen() ? "Unfollow" : "Follow"};
+        if (g_sel < (int)e.size() && e[g_sel].quest) o[n++] = {GL_A, e[g_sel].q.followed ? "Unfollow" : "Follow"};
     }
     o[n++] = {GL_Y, "Centre"};
     return n;

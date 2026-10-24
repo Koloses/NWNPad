@@ -185,6 +185,8 @@ struct State {
     double lastScan = -100;
 } S;
 std::string g_trackTag;          // chosen on the journal / map page ("" = the latest updated quest)
+bool g_trackNone = false;        // unfollowed: no marker until a quest moves on
+uint64_t g_noneWhen = 0;         // newest journal entry when it was unfollowed
 
 struct Active { std::string tag; uint32_t state; uint64_t when; };
 std::vector<Active> ActiveQuests(void* srvPlayer) {
@@ -309,6 +311,10 @@ void Scan() {
     const Mark* tr = nullptr;
     for (auto& m : S.marks) if (!g_trackTag.empty() && m.tag == g_trackTag) tr = &m;
     if (!tr) for (auto& m : S.marks) if (!tr || m.when > tr->when) tr = &m;
+    if (g_trackNone) {
+        if (tr && tr->when > g_noneWhen) { g_trackNone = false; Log("quest: '%s' moved on, following the latest again", tr->tag.c_str()); }
+        else tr = nullptr;
+    }
     S.tag = tr ? tr->tag : std::string();
     {
         static std::string last;
@@ -350,8 +356,18 @@ void Quest_Init() {
 
 void Quest_Track(const std::string& tag) {
     g_trackTag = Lower(tag);
+    g_trackNone = false;
     S.lastScan = -100;
     Log("quest: following '%s'", g_trackTag.empty() ? "(latest)" : g_trackTag.c_str());
+}
+void Quest_Untrack() {
+    g_trackTag.clear();
+    g_trackNone = true;
+    g_noneWhen = 0;
+    for (auto& m : S.marks) if (m.when > g_noneWhen) g_noneWhen = m.when;
+    S.tag.clear();
+    S.lastScan = -100;
+    Log("quest: following nothing");
 }
 std::string Quest_Tracked() { return S.tag; }
 bool Quest_FollowChosen() { return !g_trackTag.empty(); }

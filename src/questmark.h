@@ -5,6 +5,7 @@
 #include "game.h"
 void Quest_Init();
 void Quest_Track(const std::string& tag);            // follow this quest; "" = the quest updated last
+void Quest_Untrack();                                // no marker until a quest gets a new journal entry
 std::string Quest_Tracked();                         // tag (lower case) of the followed quest
 bool Quest_FollowChosen();                           // a quest was chosen (not just the latest)
 std::string Quest_Name();                            // title of the followed quest
