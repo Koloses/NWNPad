@@ -439,7 +439,8 @@ void InventoryInput() {
     if (HS.focus == 1) HS.selId = it ? it->id : 0;
     if (fabsf(g_pad.ry) > 0.2f) HS.descScroll -= g_pad.ry * R::px(700.0f) * (float)g_pad.dt;
 
-    if (g_pad.Pressed(PB_A)) {
+    bool pA = g_pad.Pressed(PB_A), pX = g_pad.Pressed(PB_X), pY = g_pad.Pressed(PB_Y);
+    if (pA) {
         if (HS.focus == 0) {
             int s = GRID[HS.gr][HS.gc];
             if (it) { Inv::UnEquip(pl, it->id); Toast("Unequipped " + it->name); }
@@ -471,10 +472,10 @@ void InventoryInput() {
             HS.lastGather = g_pad.now - 0.15;
         }
     }
-    if (g_pad.Pressed(PB_X) && it) OpenActions(*it);
+    if (pX && it) OpenActions(*it);
     if (g_pad.Pressed(PB_LS)) { HS.sortMode = (HS.sortMode + 1) % NSORT; Toast(std::string("Sort: ") + SORT_NAMES[HS.sortMode]); Refresh(true); }
     if (g_pad.Pressed(PB_BACK)) { HS.grid = !HS.grid; Toast(HS.grid ? "Grid view" : "List view"); }
-    if (g_pad.Pressed(PB_Y) && it) { Inv::Examine(pl, it->id); }
+    if (pY && it) { Inv::Examine(pl, it->id); }
     if (g_pad.Pressed(PB_B)) {
         if (HS.filterSlot >= 0) { HS.filterSlot = -1; HS.focus = 0; Refresh(true); }
         else Hub_Close();
@@ -1189,6 +1190,18 @@ void Hub_DevQuick(int slot, const char* want) {
         std::string l = it.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
         if (l.find(want) == std::string::npos) continue;
         Log("dev: qbitem %d %08x '%s' -> %d", slot, it.id, it.name.c_str(), QB_SetItem(g_ctl.quickBank, slot, it.id));
+        return;
+    }
+    Log("dev: no item matching '%s'", want);
+}
+
+// developer: select the backpack item whose name contains the text (any page)
+void Hub_DevSelect(const char* want) {
+    for (auto& it : HS.pack) {
+        std::string l = it.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
+        if (l.find(want) == std::string::npos) continue;
+        HS.focus = 1; HS.selId = it.id;
+        Log("dev: select %08x '%s' page %d", it.id, it.name.c_str(), it.page);
         return;
     }
     Log("dev: no item matching '%s'", want);

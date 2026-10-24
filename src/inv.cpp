@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <cstring>
 #include <set>
+#include <map>
 #include <algorithm>
 
 using namespace G;
@@ -249,11 +250,38 @@ template <class Fn> static void ForEachItem(Fn fn) {
 
 static void SortByGrid(std::vector<InvItem>& v) {
     std::sort(v.begin(), v.end(), [](const InvItem& a, const InvItem& b) {
+        if (a.page != b.page) return a.page < b.page;
         if (a.gy != b.gy) return a.gy < b.gy;
         return a.gx < b.gx;
     });
 }
 
+// ---- backpack pages ----
+void* InventoryPanel();
+namespace {
+const int kPages = 6;                    // the creature repository is 10 x 36, sent as pages of 10 x 6
+struct PageCache { bool seen = false; };
+PageCache g_pages[kPages];
+int g_curPage = -1, g_wantPage = -1;
+double g_reqTime = 0;
+std::set<uint32_t> g_lastSet;
+std::map<uint32_t, int> g_pageOf;       // page an item was first sent with
+double g_lastChange = 0;                // when the shown items last changed: a page has arrived once they hold still
+uint32_t g_pagesFor = 0;
+bool g_invOpen = false;
+double NowS() { return GetTickCount64() / 1000.0; }
+void ResetPages() { for (auto& p : g_pages) p = PageCache(); g_pageOf.clear(); g_curPage = -1; g_wantPage = -1; }
+void RequestPage(int p) {
+    void* panel = InventoryPanel();
+    if (!panel || p < 0 || p >= kPages) return;
+    typedef void (*fn)(void*, int);
+    ((fn)A(0x140854d40))(panel, p);              // CPanelInventory::HandleSelect: the server switches pages
+    g_wantPage = p; g_reqTime = NowS();
+    g_lastSet.clear(); g_lastChange = g_reqTime;
+}
+}  // namespace
+
+bool PagesComplete() { for (auto& p : g_pages) if (!p.seen) return false; return true; }
 void Gather(void* cre, std::vector<InvItem>& pack, InvItem equipped[ES_TOTAL]) {
     pack.clear();
     for (int i = 0; i < ES_TOTAL; i++) equipped[i] = InvItem();
@@ -270,8 +298,36 @@ void Gather(void* cre, std::vector<InvItem>& pack, InvItem equipped[ES_TOTAL]) {
         uint32_t id = F<uint32_t>(it, IT_Id);
         for (int i = 0; i < ES_TOTAL; i++) if (equipped[i].id == id) return;
         InvItem ii;
-        if (Fill(id, ii)) pack.push_back(ii);
+        if (!Fill(id, ii)) return;
+        // creature skins / claws (e.g. the 1.69 horse scripts' "PC Properties" hide) are not the player's items
+        if ((ii.equipMask & 0x3C000) && !(ii.equipMask & 0x3FFF)) return;
+        pack.push_back(ii);
     });
+    // pages: the server sends the page the panel shows and the client keeps what it has been sent, so walking
+    // through all six once when the inventory opens brings in every item; then back to the first page
+    if (g_invOpen) {
+        if (Id(cre) != g_pagesFor) { g_pagesFor = Id(cre); ResetPages(); }
+        double now = NowS();
+        static void** am = (void**)GetProcAddress(GetModuleHandleA(nullptr), "?g_pAppManager@@3PEAVCAppManager@@EA");
+        bool local = am && *am && F<void*>(*am, 8) && F<void*>(F<void*>(*am, 8), 8);   // server in this process: answers at once
+        if (g_wantPage >= 0) {
+            std::set<uint32_t> ids; for (auto& it : pack) ids.insert(it.id);
+            if (ids != g_lastSet) { g_lastSet = ids; g_lastChange = now; }
+            bool still = now - g_lastChange > (local ? 0.25 : 0.5) && now - g_reqTime > (local ? 0.3 : 0.6);
+            if (still || now - g_reqTime > 2.5) {
+                g_curPage = g_wantPage; g_wantPage = -1;
+                g_pages[g_curPage].seen = true;
+                for (auto& it : pack) if (!g_pageOf.count(it.id)) g_pageOf[it.id] = g_curPage;
+            }
+        }
+        if (g_wantPage < 0) {
+            int next = -1;
+            for (int p = 0; p < kPages && next < 0; p++) if (!g_pages[p].seen) next = p;
+            if (next >= 0) RequestPage(next);
+            else if (g_curPage != 0) RequestPage(0);
+        }
+    }
+    for (auto& it : pack) { auto pg = g_pageOf.find(it.id); it.page = pg != g_pageOf.end() ? pg->second : 0; }
     SortByGrid(pack);
 }
 
@@ -391,6 +447,8 @@ void SetGuiOpen(void* cre, bool open) {
         }
     }
     Log("inventory gui status %d", open);
+    g_invOpen = open;
+    ResetPages();                                         // rescan: things may have moved since
     typedef void (*fn)(void*, int, uint32_t);
     ((fn)A(VA_Msg_GuiInventoryStatus))(msg, open ? 1 : 0, Id(cre));
 }
@@ -691,7 +749,7 @@ std::vector<FeatInfo> Feats(void* cre) {
     return v;
 }
 Load Encumbrance(void* cre, int itemsWeight, int str) {
-    Load l; l.weight = itemsWeight; l.str = str;
+    Load l; l.weight = itemsWeight;
     static HMODULE exe = GetModuleHandleA(nullptr);
     static auto fCre = (void* (*)(void*, uint32_t))GetProcAddress(exe, "?GetCreatureByGameObjectID@CServerExoApp@@QEAAPEAVCNWSCreature@@I@Z");
     static void** am = (void**)GetProcAddress(exe, "?g_pAppManager@@3PEAVCAppManager@@EA");
@@ -700,8 +758,13 @@ Load Encumbrance(void* cre, int itemsWeight, int str) {
         if (void* sc = fCre(srv, Id(cre) & 0x7fffffffu)) {
             typedef int (*fn)(void*);
             l.weight = ((fn)A(0x140387320))(sc);             // CNWSCreature::ComputeTotalWeightCarried
+            static auto fStr = (uint8_t (*)(void*))GetProcAddress(exe, "?GetSTRStat@CNWSCreatureStats@@QEAAEXZ");
+            void* sst = F<void*>(sc, 0xad0);
+            if (sst && fStr) str = fStr(sst);                // what UpdateEncumbranceState uses
+            l.state = F<int>(sc, 0x970);
         }
     }
+    l.str = str;
     const TwoDA& t = TDA("encumbrance");
     int row = std::max(0, str);
     l.normal = t.Int(row, "Normal", 0);

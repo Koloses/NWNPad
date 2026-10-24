@@ -112,7 +112,10 @@ LB / RB switch tabs: Inventory, Character, Quickbar, Spells, Journal, Map, Syste
   A on a backpack item equips it (or uses it; A on a bag opens it). X opens the item menu:
   equip, use, split stack (d-pad sets the amount, LT / RT min / max), combine stacks, open,
   put in a bag, drop, examine, more actions (the game's wheel). Y examines, left stick click
-  cycles the backpack order (as carried, name, type, value, weight). Above the backpack: carried
+  cycles the backpack order (as carried, name, type, value, weight). All six backpack pages of the
+  game are in one list (the server sends one page at a time: the mod asks for each when the
+  inventory opens, so items show up over a few moments); creature skins scripts give the hero (like
+  the 1.69 horse scripts' "PC Properties") are not listed. Above the backpack: carried
   weight against what your strength allows (encumbrance.2da), yellow when encumbered (slower), red
   when overloaded. "Put on quickbar" in the item menu picks a quick slot for the item, as dragging it
   there does: a potion / scroll / wand slot uses it, a weapon or shield slot swaps it in (a weapon

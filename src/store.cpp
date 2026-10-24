@@ -298,7 +298,8 @@ bool Store_Input() {
     }
     if (g_pad.Pressed(PB_DLEFT) || g_pad.Pressed(PB_LLEFT)) SS.col = 0;
     if (g_pad.Pressed(PB_DRIGHT) || g_pad.Pressed(PB_LRIGHT)) SS.col = 1;
-    if (n > 0 && g_pad.Pressed(PB_A)) {
+    bool pA = g_pad.Pressed(PB_A);
+    if (n > 0 && pA) {
         const InvItem& it = v[SS.sel[SS.col]];
         if (SS.col == 0) {
             int price = BuyPrice(it);

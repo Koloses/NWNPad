@@ -30,6 +30,7 @@ struct InvItem {
     bool usable = true;              // the hero meets its requirements (class, race, alignment, proficiency, level)
     int weight = 0;                  // tenths of a pound, whole stack
     int invW = 1, invH = 1;          // footprint in the game's inventory grid (baseitems InvSlotWidth / Height)
+    int page = 0;                    // backpack page (the server sends one 10x6 page at a time)
 };
 
 namespace Inv {
@@ -50,6 +51,9 @@ void Drop(void* creature, uint32_t itemId);
 void SetGuiOpen(void* creature, bool open);
 // same for the character sheet (server then sends experience etc.)
 void SetCharSheetOpen(void* creature, bool open);
+// backpack pages: the server only sends the page the inventory panel shows (the client keeps what it was
+// sent); Gather walks through all six once while the inventory is open
+bool PagesComplete();                     // every page has been brought in since the inventory opened
 bool UseItem(void* creature, uint32_t id);   // false: use the radial menu instead
 void OpenRadial(uint32_t itemId);
 void Split(uint32_t itemId, int count);                     // new stack of `count` split off
@@ -93,6 +97,6 @@ std::vector<FeatInfo> Feats(void* creature);
 CharInfo Character(void* creature);
 // carried weight (tenths of a pound; the server's own total in single player, else the sum of the items)
 // and the encumbrance.2da limits for the hero's strength: above normal slows, above heavy stops
-struct Load { int weight = 0, normal = 0, heavy = 0, str = 0; };
+struct Load { int weight = 0, normal = 0, heavy = 0, str = 0, state = -1; };   // state: the server's 0 / 1 encumbered / 2 overloaded
 Load Encumbrance(void* creature, int itemsWeight, int str);
 }
