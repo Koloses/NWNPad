@@ -263,14 +263,15 @@ const int kPages = 6;                    // the creature repository is 10 x 36, 
 struct PageCache { bool seen = false; };
 PageCache g_pages[kPages];
 int g_curPage = -1, g_wantPage = -1;
-double g_reqTime = 0;
+double g_reqTime = 0, g_walkDone = -1;
+bool g_rescan = false;
 std::set<uint32_t> g_lastSet;
 std::map<uint32_t, int> g_pageOf;       // page an item was first sent with
 double g_lastChange = 0;                // when the shown items last changed: a page has arrived once they hold still
 uint32_t g_pagesFor = 0;
 bool g_invOpen = false;
 double NowS() { return GetTickCount64() / 1000.0; }
-void ResetPages() { for (auto& p : g_pages) p = PageCache(); g_pageOf.clear(); g_curPage = -1; g_wantPage = -1; }
+void ResetPages() { for (auto& p : g_pages) p = PageCache(); g_pageOf.clear(); g_curPage = -1; g_wantPage = -1; g_walkDone = -1; }
 void RequestPage(int p) {
     void* panel = InventoryPanel();
     if (!panel || p < 0 || p >= kPages) return;
@@ -281,6 +282,7 @@ void RequestPage(int p) {
 }
 }  // namespace
 
+void RescanPages() { g_rescan = true; }
 bool PagesComplete() { for (auto& p : g_pages) if (!p.seen) return false; return true; }
 void Gather(void* cre, std::vector<InvItem>& pack, InvItem equipped[ES_TOTAL]) {
     pack.clear();
@@ -325,6 +327,10 @@ void Gather(void* cre, std::vector<InvItem>& pack, InvItem equipped[ES_TOTAL]) {
             for (int p = 0; p < kPages && next < 0; p++) if (!g_pages[p].seen) next = p;
             if (next >= 0) RequestPage(next);
             else if (g_curPage != 0) RequestPage(0);
+            else if (g_walkDone < 0) g_walkDone = now;
+            // walk again now and then: an item that left another page (dropped, sold, given, used up) is only
+            // taken off the client's list when that page is sent again
+            else if (now - g_walkDone > 4.0 || g_rescan) { for (auto& p : g_pages) p.seen = false; g_walkDone = -1; g_rescan = false; }
         }
     }
     for (auto& it : pack) { auto pg = g_pageOf.find(it.id); it.page = pg != g_pageOf.end() ? pg->second : 0; }
@@ -465,6 +471,7 @@ void SetCharSheetOpen(void* cre, bool open) {
 
 void Drop(void* cre, uint32_t id) {
     if (!cre) return;
+    RescanPages();
     Log("drop %08x", id);
     typedef void (*fn)(void*, uint32_t);
     ((fn)A(VA_PerformDropItem))(cre, id);

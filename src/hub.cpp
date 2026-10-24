@@ -300,6 +300,7 @@ void DoAction(int a) {
     case IA_QUICK: HS.qbPlace = c.id; HS.qbPlaceName = c.name; SwitchTab(2); return;
     }
     HS.lastGather = g_pad.now - 0.15;
+    Inv::RescanPages();
 }
 // fill the fullest stack that still has room from the smallest one, until nothing moves
 void MergeStep() {

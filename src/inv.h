@@ -53,7 +53,8 @@ void SetGuiOpen(void* creature, bool open);
 void SetCharSheetOpen(void* creature, bool open);
 // backpack pages: the server only sends the page the inventory panel shows (the client keeps what it was
 // sent); Gather walks through all six once while the inventory is open
-bool PagesComplete();                     // every page has been brought in since the inventory opened
+bool PagesComplete();
+void RescanPages();                       // walk the pages again soon (after taking things out)                     // every page has been brought in since the inventory opened
 bool UseItem(void* creature, uint32_t id);   // false: use the radial menu instead
 void OpenRadial(uint32_t itemId);
 void Split(uint32_t itemId, int count);                     // new stack of `count` split off
