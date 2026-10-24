@@ -769,9 +769,10 @@ void Control_PreInput(void* in) {
     if (!g_ctl.radialOpen) {
         float rx = g_cfg.invertCamX ? -g_pad.rx : g_pad.rx;
         float ry = g_cfg.invertCamY ? -g_pad.ry : g_pad.ry;
-        // the game adds 75 (turn/tilt) and 7.5 (zoom) per frame while a camera key is held;
-        // full stick = key speed x setting, with a curve for fine control near the centre
-        float k = (float)g_pad.dt * 60.0f;
+        // the game adds 75 (turn/tilt) and 7.5 (zoom) per frame while a camera key is held, so the keys turn
+        // faster the higher the frame rate; the stick does the same (full stick = key speed x setting), with a
+        // curve for fine control near the centre
+        const float k = 1.0f;
         auto curve = [](float v) { return v * (0.35f + 0.65f * fabsf(v)); };
         if (g_pad.Down(PB_LB)) {
             F<float>(in, OFS::In_CamPitch) += curve(ry) * 75.0f * g_cfg.camPitchSpeed * k;
