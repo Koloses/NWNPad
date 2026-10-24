@@ -357,6 +357,7 @@ void Quest_Init() {
 void Quest_Track(const std::string& tag) {
     g_trackTag = Lower(tag);
     g_trackNone = false;
+    for (auto& m : S.marks) if (m.tag == g_trackTag) S.tag = m.tag;   // shown at once; the rescan confirms
     S.lastScan = -100;
     Log("quest: following '%s'", g_trackTag.empty() ? "(latest)" : g_trackTag.c_str());
 }
@@ -369,7 +370,7 @@ void Quest_Untrack() {
     S.lastScan = -100;
     Log("quest: following nothing");
 }
-std::string Quest_Tracked() { return S.tag; }
+std::string Quest_Tracked() { Update(); return S.tag; }
 bool Quest_FollowChosen() { return !g_trackTag.empty(); }
 std::string Quest_Title(const std::string& tag) { auto it = g_title.find(Lower(tag)); return it != g_title.end() && !it->second.empty() ? it->second : tag; }
 std::string Quest_Name() { return S.tag.empty() ? std::string() : Quest_Title(S.tag); }
