@@ -184,6 +184,20 @@ static void DrawHero(void* pl) {
     float nx = cx + r + px(18);
     float ny = pyt + ph - px(110);
     Text(FONT_TITLE, px(30), nx, ny, name.c_str(), Theme::Gold);
+    // effects on the hero (the game's effect icons: spells, poison, disease, ability changes ...)
+    {
+        auto fx = GD::EffectIcons(pl);
+        float is = px(32), gap = px(5), ix = nx, iy = ny - is - px(10);
+        int shown = 0;
+        for (int e : fx) {
+            uint32_t t = GD::EffectIconTex(e);
+            if (!t) continue;
+            if (shown == 10) { Text(FONT_BODY_BOLD, px(18), ix + px(2), iy + px(6), ("+" + std::to_string((int)fx.size() - shown)).c_str(), Theme::TextDim); break; }
+            RoundRect(ix - px(1), iy - px(1), is + px(2), is + px(2), px(5), Col(0, 0, 0, 160));
+            ImageRounded(t, ix, iy, is, is, px(4), Col());
+            ix += is + gap; shown++;
+        }
+    }
     char buf[64];
     snprintf(buf, sizeof buf, "Level %d", GD::Level(pl));
     float lw = Text(FONT_BODY, px(20), nx, ny + px(36), buf, Theme::TextDim);
@@ -210,6 +224,16 @@ static void DrawHero(void* pl) {
         if (i >= 5) break;
         float mx = px0 + pr + i * (pr * 2 + px(12));
         PortraitCircle(m, mx, py0 + pr, pr, px(4), false);
+        // the member's effects, small under the portrait (single player: the server knows them)
+        auto fx = GD::EffectIcons(m);
+        float is = px(16), gap = px(2);
+        int k = 0;
+        std::vector<uint32_t> tex;
+        for (int e : fx) if (uint32_t t = GD::EffectIconTex(e)) tex.push_back(t);
+        int n = std::min((int)tex.size(), 3);
+        float sx = mx - (n * is + (n - 1) * gap) * 0.5f, sy = py0 + pr * 2 + px(6);
+        for (; k < n; k++) ImageRounded(tex[k], sx + k * (is + gap), sy, is, is, px(3), Col());
+        if ((int)tex.size() > 3) Text(FONT_BODY_BOLD, px(13), sx + n * (is + gap), sy, ("+" + std::to_string((int)tex.size() - 3)).c_str(), Theme::TextDim);
         i++;
     }
 }

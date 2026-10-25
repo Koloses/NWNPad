@@ -943,7 +943,28 @@ void DrawCharacter(float x, float y, float w, float h, float a) {
     L(3, 1, "Spell resistance", std::to_string(c.sr));
     L(4, 1, "Spell failure / check penalty", Fmt("%d%%", c.asf) + "  /  " + (c.acp ? Fmt("-%d", c.acp) : std::string("0")));
     iy += rh * 5 + px(14);
-    if (!c.attackOff.empty()) { StatLine(ix, iy, cw, "Gold", std::to_string(c.gold), a); }
+    if (!c.attackOff.empty()) { StatLine(ix, iy, cw, "Gold", std::to_string(c.gold), a); iy += rh; }
+    // effects: icon and name, as many as fit
+    {
+        auto fx = GD::EffectIcons(pl);
+        if (!fx.empty()) {
+            iy += px(10);
+            Text(FONT_TITLE, px(20), ix, iy, "Effects", Theme::GoldDim.alpha(a));
+            iy += px(34);
+            float ex = ix, is = px(30), lim = y + h - px(10);
+            for (int e : fx) {
+                uint32_t t = GD::EffectIconTex(e);
+                std::string nm = GD::EffectIconName(e);
+                float tw = TextWidth(FONT_BODY, px(19), nm.c_str());
+                float ew = is + px(8) + tw + px(26);
+                if (ex + ew > ix + iw) { ex = ix; iy += is + px(8); }
+                if (iy + is > lim) break;
+                if (t) ImageRounded(t, ex, iy, is, is, px(4), Col().alpha(a));
+                Text(FONT_BODY, px(19), ex + is + px(8), iy + px(4), nm.c_str(), Theme::Text.alpha(a));
+                ex += ew;
+            }
+        }
+    }
 }
 void DrawBinding(int slot, float cx, float y, float size, float a) {
     int mod, btn; QB_Binding(slot, mod, btn);

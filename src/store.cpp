@@ -13,6 +13,7 @@
 #include "log.h"
 #include "item_details.h"
 #include "ui.h"
+#include <algorithm>
 #include <windows.h>
 #include <vector>
 #include <string>
@@ -61,7 +62,9 @@ struct StoreState {
     double openTime = 0, lastGather = -10;
     std::string toast; double toastTime = -10;
     uint32_t keeper = 0x7f000000;
+    int sortMode = 0;            // 0 as the game lists them, 1 name, 2 type, 3 value, 4 weight (both lists)
 } SS;
+const char* SORT_NAMES[5] = {"Game order", "Name", "Type", "Value", "Weight"};
 
 void* WorldStore() {
     if (!App()) return nullptr;
@@ -194,6 +197,17 @@ void Refresh(bool force = false) {
     SS.lastGather = g_pad.now;
     GatherWares();
     Inv::Gather(Player(), SS.pack, SS.eq);
+    if (SS.sortMode) {
+        int m = SS.sortMode;
+        auto by = [m](const InvItem& a, const InvItem& b) {
+            if (m == 2 && a.typeName != b.typeName) return a.typeName < b.typeName;
+            if (m == 3 && a.cost != b.cost) return a.cost > b.cost;
+            if (m == 4 && a.weight != b.weight) return a.weight > b.weight;
+            return a.name < b.name;
+        };
+        std::stable_sort(SS.pack.begin(), SS.pack.end(), by);
+        std::stable_sort(SS.wares.begin(), SS.wares.end(), by);
+    }
     // report a sale only when the item really left the backpack
     if (g_sale.id && g_pad.now - g_sale.t > 0.4) {
         bool still = false;
@@ -326,6 +340,7 @@ bool Store_Input() {
         SS.lastGather = g_pad.now - 0.1;
     }
     if (n > 0 && g_pad.Pressed(PB_Y)) Inv::Examine(pl, v[SS.sel[SS.col]].id);
+    if (g_pad.Pressed(PB_LS)) { SS.sortMode = (SS.sortMode + 1) % 5; Toast(std::string("Sort: ") + SORT_NAMES[SS.sortMode]); Refresh(true); }
     // store tabs / pages
     int dt = g_pad.Pressed(PB_RB) ? 1 : g_pad.Pressed(PB_LB) ? -1 : 0;
     if (dt) {
@@ -453,7 +468,10 @@ void Store_Draw() {
         UIK::Glyph(GL_RB, lx + colW - gw, ty, gs, a);
     }
     // right header: your backpack + gold
-    Text(FONT_TITLE, px(28), rx, hy, "Your backpack", Theme::Gold.alpha(a));
+    {
+        float tw = Text(FONT_TITLE, px(28), rx, hy, "Your backpack", Theme::Gold.alpha(a));
+        if (SS.sortMode) Text(FONT_BODY, px(18), rx + tw + px(14), hy + px(8), (std::string("by ") + SORT_NAMES[SS.sortMode]).c_str(), Theme::TextFaint.alpha(a));
+    }
     {
         std::string g = Gp(Inv::Gold(Player()));
         float gw = TextWidth(FONT_BODY_BOLD, px(22), g.c_str());
@@ -492,10 +510,11 @@ void Store_Draw() {
         RoundRectBorder(tx2, ty2, tw, px(40), px(20), px(1), Theme::Line.alpha(ta));
         TextCentered(FONT_BODY, px(22), W() * 0.5f, ty2 + px(7), SS.toast.c_str(), Theme::Text.alpha(ta));
     }
-    HintItem hints[8]; int hn = 0;
+    HintItem hints[10]; int hn = 0;
     hints[hn++] = {GL_DPAD, "Choose"};
     hints[hn++] = {GL_A, SS.col == 0 ? "Buy" : "Sell"};
     hints[hn++] = {GL_Y, "Examine"};
+    hints[hn++] = {GL_L3, "Sort"};
     hints[hn++] = {GL_RS, "Scroll"};
     hints[hn++] = {GL_LB, "Category"};
     if (NumPages() > 1) hints[hn++] = {GL_LT, "Page"};

@@ -53,7 +53,9 @@ The hero's portrait in the bottom-left corner is a rectangular card with the hea
 (no ring around the hero in the world). Quick slots holding a mode (Power Attack, Expertise,
 Rapid Shot, Flurry of Blows, Detect / Stealth, Parry, Defensive Casting, Dirty Fighting, Defensive
 Stance ...) show its state: a turning arc while it switches, a gold ring and an ON badge while it
-is active. Resting shows a progress card (time left); B stops resting.
+is active. Resting shows a progress card (time left); B stops resting. Above the hero's name are the game's effect icons (spells, poison,
+disease, ability and skill changes ...); party members show theirs under their portraits (single
+player: online the server only tells a client about its own hero).
 
 The target is picked automatically from what is in front of the hero; enemies are preferred.
 The target frame shows exact health for your party; for everyone else the game only tells the
@@ -125,7 +127,8 @@ LB / RB switch tabs: Inventory, Character, Quickbar, Spells, Journal, Map, Syste
 * **Character** - LT / RT switch pages. Overview: race, alignment, classes, level and experience,
   ability scores with modifiers (green / red when items or spells change them, with the base value),
   hit points, armour class, base attack, attacks per round (main and off hand), saving throws, spell
-  resistance, arcane spell failure, armour check penalty, gold. Skills: every skill you can use with
+  resistance, arcane spell failure, armour check penalty, gold, and the effects on the hero with
+  their names. Skills: every skill you can use with
   its total and ranks, description on the right. Feats: all feats with descriptions. A opens the
   game's own sheet, X levels up when available, Y rests.
 * **Quickbar** - all 36 slots with the button that triggers each one. A opens the game's
@@ -170,7 +173,8 @@ sells, Y examines, LB / RB change the category, LT / RT the page, B leaves. Pric
 merchant will pay are shown next to your items; red prices are out of reach. Items the merchant
 will not take are dimmed with the reason instead of a price (plot item, stolen, cursed, kind of
 item the merchant does not trade in, worthless, bags that are not empty). After a sale the mod
-checks the item really left your backpack and says so if the merchant refused it.
+checks the item really left your backpack and says so if the merchant refused it. Left stick click sorts both
+lists (name, type, value, weight).
 
 ### Character creation and level-up
 

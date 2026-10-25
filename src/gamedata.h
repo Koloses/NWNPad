@@ -18,6 +18,11 @@ bool IsDead(void* creature);
 int Reaction(void* creature);                               // 0 neutral 1 friendly 2 hostile
 uint32_t MasterId(void* creature);
 std::vector<void*> PartyMembers(void* player);              // associates in the area
+// effect icons (effecticons.2da rows) on a creature: the server's list in single player, otherwise what
+// the game's player state bar shows for the hero (the server tells a client only about its own hero)
+std::vector<int> EffectIcons(void* creature);
+uint32_t EffectIconTex(int icon);                           // GL texture of effecticons.2da Icon, or 0
+std::string EffectIconName(int icon);
 int Level(void* creature);
 bool IsPaused();
 bool LevelUpReady();

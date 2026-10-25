@@ -3,6 +3,9 @@
 #include "text.h"
 #include "res.h"
 #include "log.h"
+#include "twoda.h"
+#include "pad.h"
+#include <map>
 #include <windows.h>
 #include <cstring>
 
@@ -146,5 +149,47 @@ bool IsPaused() {
     void* app = App();
     if (!app) return false;
     return ((fn)A(0x1406a96a0))(app, 2) != 0;
+}
+
+std::vector<int> EffectIcons(void* cre) {
+    std::vector<int> v;
+    if (!cre || G::Loading()) return v;
+    // cache per creature for a quarter second: the HUD asks every frame
+    struct C { std::vector<int> v; double t = -10; };
+    static std::map<uint32_t, C> cache;
+    C& c = cache[Id(cre)];
+    if (g_pad.now - c.t < 0.25) return c.v;
+    c.t = g_pad.now;
+    static HMODULE exe = GetModuleHandleA(nullptr);
+    static auto fCre = (void* (*)(void*, uint32_t))GetProcAddress(exe, "?GetCreatureByGameObjectID@CServerExoApp@@QEAAPEAVCNWSCreature@@I@Z");
+    static void** am = (void**)GetProcAddress(exe, "?g_pAppManager@@3PEAVCAppManager@@EA");
+    void* srv = am && *am ? F<void*>(*am, 8) : nullptr;
+    void* sc = srv && F<void*>(srv, 8) && fCre ? fCre(srv, Id(cre) & 0x7fffffffu) : nullptr;
+    if (sc) {
+        // CNWSCreature effect icon list (CNWSEffectListHandler::OnApplyEffectIcon): entries start with the icon id
+        void** e = F<void**>(sc, 0x778); int n = F<int>(sc, 0x780);
+        for (int i = 0; e && i < n && i < 64; i++) if (e[i] && Readable(e[i], 2)) v.push_back(F<uint16_t>(e[i], 0));
+    } else if (cre == G::Player()) {
+        void* in = G::Internal();
+        void* gig = in ? F<void*>(in, OFS::In_GuiInGame) : nullptr;
+        void* bar = gig ? F<void*>(gig, 0xb0) : nullptr;                 // CPanelPlayerStateBar
+        if (bar && Readable(bar, 0x100) && strstr(G::ClassName(bar), "StateBar")) {
+            void** b = F<void**>(bar, 0xf0); int n = F<int>(bar, 0xf8);
+            for (int i = 0; b && i < n && i < 64; i++) if (b[i] && Readable(b[i], 0x20)) v.push_back((int)F<uint32_t>(b[i], 0x18));
+        }
+    }
+    c.v = v;
+    return v;
+}
+
+uint32_t EffectIconTex(int icon) {
+    const TwoDA& t = TDA("effecticons");
+    const std::string& r = t.Get(icon, "Icon");
+    return r.empty() ? 0 : Res_Texture(r.c_str());
+}
+std::string EffectIconName(int icon) {
+    const TwoDA& t = TDA("effecticons");
+    int s = t.Int(icon, "StrRef", -1);
+    return s >= 0 ? Tlk(s) : std::string();
 }
 }  // namespace GD
