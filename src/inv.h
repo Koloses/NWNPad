@@ -69,6 +69,7 @@ void* Message();                            // CNWCMessage*
 // containers
 void* InventoryPanel();
 uint32_t OpenContainerId();                 // 0x7f000000 if none
+void InstallHooks();                      // container contents tracking
 void GatherContainer(void* creature, std::vector<InvItem>& out);
 void TakeItem(uint32_t itemId);
 void CloseContainer();

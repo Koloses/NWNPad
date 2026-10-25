@@ -7,6 +7,7 @@
 #include "render.h"
 #include "log.h"
 #include "twoda.h"
+#include "hooks.h"
 #include <windows.h>
 #include <cstring>
 #include <set>
@@ -365,6 +366,22 @@ uint32_t OpenContainerId() {
 // item it was shown as: remember what was taken so it is not listed again
 static std::set<uint32_t> g_takenGold;
 
+// The client marks an item it was shown in a container as "in a container", possessed by the viewer, and
+// keeps it after the container is closed without saying which container it was. Opening a container makes
+// the server send its items again (as new), so the container open at the time an item arrives is its own.
+static std::map<uint32_t, uint32_t> g_itemContainer;     // item id -> container it was last shown in
+typedef int (*ItemAdd_t)(void*, int, void**);
+static ItemAdd_t o_ItemAdd = nullptr;
+static int hk_ItemAdd(void* msg, int a, void** out) {
+    int r = o_ItemAdd(msg, a, out);
+    uint32_t c = OpenContainerId();
+    if (out && *out && c != 0x7f000000) g_itemContainer[F<uint32_t>(*out, IT_Id)] = c;
+    return r;
+}
+void InstallHooks() {
+    o_ItemAdd = (ItemAdd_t)Hook_Create(0x14079e930, (void*)hk_ItemAdd, "HandleServerToPlayerItemUpdate_Add");
+}
+
 void GatherContainer(void* cre, std::vector<InvItem>& out) {
     out.clear();
     if (!cre) return;
@@ -373,6 +390,8 @@ void GatherContainer(void* cre, std::vector<InvItem>& out) {
         if (F<int>(it, IT_InContainer) != 1) return;
         if (F<uint32_t>(it, IT_Possessor) != cid) return;
         if (g_takenGold.count(F<uint32_t>(it, IT_Id))) return;
+        auto ic = g_itemContainer.find(F<uint32_t>(it, IT_Id));
+        if (o_ItemAdd && (ic == g_itemContainer.end() || ic->second != OpenContainerId())) return;   // shown in another container
         InvItem ii;
         if (Fill(F<uint32_t>(it, IT_Id), ii)) out.push_back(ii);
     });

@@ -14,6 +14,7 @@
 #include "hub_pages.h"
 #include "describe.h"
 #include "quickbar.h"
+#include "inv.h"
 #include "loot.h"
 #include "party.h"
 #include "popup.h"
@@ -180,6 +181,7 @@ void UI_InstallHooks() {
     Dialog_InstallHooks();
     HUD_InstallHooks();
     QB_InstallHooks();
+    Inv::InstallHooks();
     Cursor_InstallHooks();
     Describe_InstallHooks();
     Popup_InstallHooks();
