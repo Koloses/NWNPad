@@ -8,6 +8,7 @@
 #include <map>
 #include <windows.h>
 #include <cstring>
+#include <cmath>
 
 using namespace G;
 
@@ -151,35 +152,115 @@ bool IsPaused() {
     return ((fn)A(0x1406a96a0))(app, 2) != 0;
 }
 
-std::vector<int> EffectIcons(void* cre) {
-    std::vector<int> v;
+// Single player: the server's icon list (CNWSEffectListHandler::OnApplyEffectIcon) - CEffectIconObject
+// (0xc): icon id u16 +0, flag +8 = applied by something other than worn equipment. The time left comes
+// from the icon effects themselves (CNWSObject effect list +0x150 / +0x158, CGameEffect type +8, duration
+// type flags +10 & 7, expiry day / time +0x10 / +0x14, integer 0 = icon id) against the world timer.
+std::vector<FxIcon> EffectList(void* cre) {
+    std::vector<FxIcon> v;
     if (!cre || G::Loading()) return v;
-    // cache per creature for a quarter second: the HUD asks every frame
-    struct C { std::vector<int> v; double t = -10; };
+    struct C { std::vector<FxIcon> v; double t = -10; };
     static std::map<uint32_t, C> cache;
     C& c = cache[Id(cre)];
-    if (g_pad.now - c.t < 0.25) return c.v;
+    if (g_pad.now - c.t < 0.25) {
+        v = c.v;
+        for (auto& f : v) if (f.left >= 0) f.left = fmaxf(0.0f, f.left - (float)(g_pad.now - c.t));
+        return v;
+    }
     c.t = g_pad.now;
     static HMODULE exe = GetModuleHandleA(nullptr);
     static auto fCre = (void* (*)(void*, uint32_t))GetProcAddress(exe, "?GetCreatureByGameObjectID@CServerExoApp@@QEAAPEAVCNWSCreature@@I@Z");
+    static auto fTimer = (void* (*)(void*, uint32_t))GetProcAddress(exe, "?GetActiveTimer@CServerExoApp@@QEAAPEAVCWorldTimer@@I@Z");
+    static auto fNow = (void (*)(void*, uint32_t*, uint32_t*))GetProcAddress(exe, "?GetWorldTime@CWorldTimer@@QEAAXPEAI0@Z");
+    static auto fDiff = (uint64_t (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t))GetProcAddress(exe, "?GetTimeDifference@CWorldTimer@@QEAA_KIIII@Z");
+    static auto fInt = (int (*)(void*, int))GetProcAddress(exe, "?GetInteger@CGameEffect@@QEAAHH@Z");
     static void** am = (void**)GetProcAddress(exe, "?g_pAppManager@@3PEAVCAppManager@@EA");
+    const uint16_t TypeIcon = (uint16_t)*(int*)G::A(0x140de567c);          // CGameEffect type of EffectIcon()
+    const int DurEquipped = *(int*)G::A(0x140de5474);                      // CGameEffect::DURATION_TYPE_EQUIPPED
+    const int DurInnate = 4;                                               // CGameEffect::DURATION_TYPE_INNATE
+    const uint16_t TypeHaste = 1, TypeSlow = 3, TypeHasteInt = 0x29, TypeSlowInt = 0x2a;   // OnApplyHasteOrSlow
     void* srv = am && *am ? F<void*>(*am, 8) : nullptr;
-    void* sc = srv && F<void*>(srv, 8) && fCre ? fCre(srv, Id(cre) & 0x7fffffffu) : nullptr;
+    uint32_t sid = Id(cre) & 0x7fffffffu;
+    void* sc = srv && F<void*>(srv, 8) && fCre ? fCre(srv, sid) : nullptr;
     if (sc) {
-        // CNWSCreature effect icon list (CNWSEffectListHandler::OnApplyEffectIcon): entries start with the icon id
         void** e = F<void**>(sc, 0x778); int n = F<int>(sc, 0x780);
-        for (int i = 0; e && i < n && i < 64; i++) if (e[i] && Readable(e[i], 2)) v.push_back(F<uint16_t>(e[i], 0));
+        for (int i = 0; e && i < n && i < 64; i++) if (e[i] && Readable(e[i], 0xc)) {
+            FxIcon f; f.icon = F<uint16_t>(e[i], 0); f.equipment = F<int>(e[i], 8) == 0;
+            v.push_back(f);
+        }
+        // time left: the longest of the icon's own (not equipment) effects; none if one of them doesn't expire
+        void* timer = fTimer ? fTimer(srv, sid) : nullptr;
+        uint32_t d = 0, t = 0;
+        if (timer && fNow && fDiff && fInt) fNow(timer, &d, &t);
+        void** fx = F<void**>(sc, 0x150); int nf = F<int>(sc, 0x158);
+        auto ok = [&](int i) { return fx[i] && Readable(fx[i], 0x20); };
+        auto type = [&](int i) { return F<uint16_t>(fx[i], 8); };
+        auto dur = [&](int i) { return F<uint16_t>(fx[i], 10) & 7; };
+        // one effect's contribution: >= 0 seconds left, -1 doesn't run out
+        auto left = [&](int i) -> float {
+            uint32_t ed = F<uint32_t>(fx[i], 0x10), et = F<uint32_t>(fx[i], 0x14);
+            if (!ed && !et) return -1;
+            return (float)fDiff(timer, d, t, ed, et) / 1000.0f;
+        };
+        for (auto& f : v) {
+            if (f.equipment || !d || !fx) continue;
+            float best = -2;                                                 // -2: nothing seen yet
+            bool perm = false, onlyWorn = true;
+            for (int i = 0; i < nf && i < 512 && !perm; i++) {
+                if (!ok(i) || type(i) != TypeIcon || fInt(fx[i], 0) != f.icon || dur(i) == DurEquipped) continue;
+                if (dur(i) == DurInnate && !F<uint32_t>(fx[i], 0x10) && !F<uint32_t>(fx[i], 0x14)) {
+                    // made by the engine for a combined effect (haste / slow: the internal effect with the same
+                    // id): its time is that of the effects it combines
+                    uint64_t id = F<uint64_t>(fx[i], 0);
+                    int src = -1;
+                    for (int k = 0; k < nf && k < 512; k++)
+                        if (ok(k) && F<uint64_t>(fx[k], 0) == id) { if (type(k) == TypeHasteInt) src = TypeHaste; if (type(k) == TypeSlowInt) src = TypeSlow; }
+                    if (src < 0) { perm = true; onlyWorn = false; break; }
+                    for (int k = 0; k < nf && k < 512; k++) {
+                        if (!ok(k) || type(k) != src) continue;
+                        if (dur(k) == DurEquipped) continue;
+                        onlyWorn = false;
+                        float l = left(k);
+                        if (l < 0) { perm = true; break; }
+                        best = fmaxf(best, l);
+                    }
+                    continue;
+                }
+                onlyWorn = false;
+                float l = left(i);
+                if (l < 0) { perm = true; break; }
+                best = fmaxf(best, l);
+            }
+            if (onlyWorn && best == -2 && !perm) { f.equipment = true; continue; }   // e.g. boots of speed
+            f.left = perm || best < 0 ? -1 : best;
+        }
     } else if (cre == G::Player()) {
         void* in = G::Internal();
         void* gig = in ? F<void*>(in, OFS::In_GuiInGame) : nullptr;
         void* bar = gig ? F<void*>(gig, 0xb0) : nullptr;                 // CPanelPlayerStateBar
         if (bar && Readable(bar, 0x100) && strstr(G::ClassName(bar), "StateBar")) {
             void** b = F<void**>(bar, 0xf0); int n = F<int>(bar, 0xf8);
-            for (int i = 0; b && i < n && i < 64; i++) if (b[i] && Readable(b[i], 0x20)) v.push_back((int)F<uint32_t>(b[i], 0x18));
+            for (int i = 0; b && i < n && i < 64; i++) if (b[i] && Readable(b[i], 0x20)) { FxIcon f; f.icon = (int)F<uint32_t>(b[i], 0x18); v.push_back(f); }
         }
     }
     c.v = v;
     return v;
+}
+
+std::vector<FxIcon> EffectIcons(void* cre) {
+    std::vector<FxIcon> v;
+    for (auto& f : EffectList(cre)) if (!f.equipment) v.push_back(f);
+    return v;
+}
+
+std::string EffectTimeLeft(float s) {
+    if (s < 0) return std::string();
+    char b[16];
+    int t = (int)ceilf(s);
+    if (t < 600) snprintf(b, sizeof b, "%d:%02d", t / 60, t % 60);
+    else if (t < 3600) snprintf(b, sizeof b, "%dm", t / 60);
+    else snprintf(b, sizeof b, "%dh", t / 3600);
+    return b;
 }
 
 uint32_t EffectIconTex(int icon) {

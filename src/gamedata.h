@@ -20,7 +20,10 @@ uint32_t MasterId(void* creature);
 std::vector<void*> PartyMembers(void* player);              // associates in the area
 // effect icons (effecticons.2da rows) on a creature: the server's list in single player, otherwise what
 // the game's player state bar shows for the hero (the server tells a client only about its own hero)
-std::vector<int> EffectIcons(void* creature);
+struct FxIcon { int icon = 0; bool equipment = false; float left = -1; };   // left: seconds (real time), -1 = doesn't run out / unknown
+std::vector<FxIcon> EffectList(void* creature);             // every icon, worn equipment's included (marked)
+std::vector<FxIcon> EffectIcons(void* creature);            // without the ones only worn equipment gives
+std::string EffectTimeLeft(float seconds);                  // "0:45", "12m", "2h"; "" for -1
 uint32_t EffectIconTex(int icon);                           // GL texture of effecticons.2da Icon, or 0
 std::string EffectIconName(int icon);
 int Level(void* creature);

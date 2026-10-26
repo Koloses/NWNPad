@@ -654,6 +654,10 @@ static void DevCommands(void* player) {
         Log("dev: give: nothing matching '%s' in %d items", want.c_str(), (int)pack.size());
         return;
     }
+    if (strncmp(line, "fx", 2) == 0 && player) {   // the hero's effect icons (tests)
+        for (auto& f : GD::EffectList(player)) Log("dev: fx icon %d '%s' equipment %d left %.1f", f.icon, GD::EffectIconName(f.icon).c_str(), f.equipment, f.left);
+        return;
+    }
     if (strncmp(line, "nss ", 4) == 0) {       // nss <script code>: run NWScript on the server (single player tests)
         HMODULE exe = GetModuleHandleA(nullptr);
         void** vm = (void**)GetProcAddress(exe, "?g_pVirtualMachine@@3PEAVCVirtualMachine@@EA");

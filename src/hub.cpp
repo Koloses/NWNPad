@@ -946,15 +946,17 @@ void DrawCharacter(float x, float y, float w, float h, float a) {
     if (!c.attackOff.empty()) { StatLine(ix, iy, cw, "Gold", std::to_string(c.gold), a); iy += rh; }
     // effects: icon and name, as many as fit
     {
-        auto fx = GD::EffectIcons(pl);
+        auto fx = GD::EffectList(pl);              // worn equipment's too, marked
         if (!fx.empty()) {
             iy += px(10);
             Text(FONT_TITLE, px(20), ix, iy, "Effects", Theme::GoldDim.alpha(a));
             iy += px(34);
             float ex = ix, is = px(30), lim = y + h - px(10);
-            for (int e : fx) {
-                uint32_t t = GD::EffectIconTex(e);
-                std::string nm = GD::EffectIconName(e);
+            for (auto& e : fx) {
+                uint32_t t = GD::EffectIconTex(e.icon);
+                std::string nm = GD::EffectIconName(e.icon);
+                if (e.equipment) nm += " (worn)";
+                else if (e.left >= 0) nm += "  " + GD::EffectTimeLeft(e.left);
                 float tw = TextWidth(FONT_BODY, px(19), nm.c_str());
                 float ew = is + px(8) + tw + px(26);
                 if (ex + ew > ix + iw) { ex = ix; iy += is + px(8); }

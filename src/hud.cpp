@@ -187,14 +187,24 @@ static void DrawHero(void* pl) {
     // effects on the hero (the game's effect icons: spells, poison, disease, ability changes ...)
     {
         auto fx = GD::EffectIcons(pl);
-        float is = px(32), gap = px(5), ix = nx, iy = ny - is - px(10);
+        bool timed = false;
+        for (auto& e : fx) if (e.left >= 0) timed = true;
+        float is = px(32), gap = px(7), ix = nx, iy = ny - is - px(10) - (timed ? px(18) : 0);
         int shown = 0;
-        for (int e : fx) {
-            uint32_t t = GD::EffectIconTex(e);
+        for (auto& e : fx) {
+            uint32_t t = GD::EffectIconTex(e.icon);
             if (!t) continue;
             if (shown == 10) { Text(FONT_BODY_BOLD, px(18), ix + px(2), iy + px(6), ("+" + std::to_string((int)fx.size() - shown)).c_str(), Theme::TextDim); break; }
             RoundRect(ix - px(1), iy - px(1), is + px(2), is + px(2), px(5), Col(0, 0, 0, 160));
-            ImageRounded(t, ix, iy, is, is, px(4), Col());
+            bool ending = e.left >= 0 && e.left < 10;                       // about to run out: blinks
+            float al = ending ? 0.55f + 0.45f * sinf((float)g_pad.now * 8.0f) : 1.0f;
+            ImageRounded(t, ix, iy, is, is, px(4), Col().alpha(al));
+            if (e.left >= 0) {
+                std::string tl = GD::EffectTimeLeft(e.left);
+                float tw = TextWidth(FONT_BODY_BOLD, px(14), tl.c_str());
+                RoundRect(ix + (is - tw) * 0.5f - px(3), iy + is + px(1), tw + px(6), px(17), px(4), Col(0, 0, 0, 170));
+                Text(FONT_BODY_BOLD, px(14), ix + (is - tw) * 0.5f, iy + is + px(1), tl.c_str(), ending ? Col(240, 120, 90) : Theme::Text);
+            }
             ix += is + gap; shown++;
         }
     }
@@ -229,7 +239,7 @@ static void DrawHero(void* pl) {
         float is = px(16), gap = px(2);
         int k = 0;
         std::vector<uint32_t> tex;
-        for (int e : fx) if (uint32_t t = GD::EffectIconTex(e)) tex.push_back(t);
+        for (auto& e : fx) if (uint32_t t = GD::EffectIconTex(e.icon)) tex.push_back(t);
         int n = std::min((int)tex.size(), 3);
         float sx = mx - (n * is + (n - 1) * gap) * 0.5f, sy = py0 + pr * 2 + px(6);
         for (; k < n; k++) ImageRounded(tex[k], sx + k * (is + gap), sy, is, is, px(3), Col());

@@ -53,8 +53,9 @@ The hero's portrait in the bottom-left corner is a rectangular card with the hea
 (no ring around the hero in the world). Quick slots holding a mode (Power Attack, Expertise,
 Rapid Shot, Flurry of Blows, Detect / Stealth, Parry, Defensive Casting, Dirty Fighting, Defensive
 Stance ...) show its state: a turning arc while it switches, a gold ring and an ON badge while it
-is active. Resting shows a progress card (time left); B stops resting. Above the hero's name are the game's effect icons (spells, poison,
-disease, ability and skill changes ...); party members show theirs under their portraits (single
+is active. Resting shows a progress card (time left); B stops resting. Above the hero's name are the game's effect icons (spells, potions, poison,
+disease, ability and skill changes ...; not what worn equipment gives) with the time left under
+those that run out (blinking in the last 10 seconds); party members show theirs under their portraits (single
 player: online the server only tells a client about its own hero).
 When the hero dies, the death screen shows the module's message and its choices with the d-pad and A:
 Respawn, Load game (the save list; B returns), Wait for help (online) and Exit to main menu (asks first).
