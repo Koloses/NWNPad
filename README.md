@@ -56,6 +56,8 @@ Stance ...) show its state: a turning arc while it switches, a gold ring and an 
 is active. Resting shows a progress card (time left); B stops resting. Above the hero's name are the game's effect icons (spells, poison,
 disease, ability and skill changes ...); party members show theirs under their portraits (single
 player: online the server only tells a client about its own hero).
+When the hero dies, the death screen shows the module's message and its choices with the d-pad and A:
+Respawn, Load game (the save list; B returns), Wait for help (online) and Exit to main menu (asks first).
 
 The target is picked automatically from what is in front of the hero; enemies are preferred.
 The target frame shows exact health for your party; for everyone else the game only tells the

@@ -654,6 +654,19 @@ static void DevCommands(void* player) {
         Log("dev: give: nothing matching '%s' in %d items", want.c_str(), (int)pack.size());
         return;
     }
+    if (strncmp(line, "nss ", 4) == 0) {       // nss <script code>: run NWScript on the server (single player tests)
+        HMODULE exe = GetModuleHandleA(nullptr);
+        void** vm = (void**)GetProcAddress(exe, "?g_pVirtualMachine@@3PEAVCVirtualMachine@@EA");
+        auto str = (void (*)(void*, const char*))GetProcAddress(exe, "??0CExoString@@QEAA@PEBD@Z");
+        auto run = (int (*)(void*, const void*, uint32_t, int, int))GetProcAddress(exe, "?RunScriptChunk@CVirtualMachine@@QEAAHAEBVCExoString@@IHH@Z");
+        struct { char* p; uint32_t len, cap; } code{};
+        auto firstPC = (uint32_t (*)(void*))GetProcAddress(exe, "?GetFirstPCObject@CServerExoApp@@QEAAIXZ");
+        void** am = (void**)GetProcAddress(exe, "?g_pAppManager@@3PEAVCAppManager@@EA");
+        void* srv = am && *am ? F<void*>(*am, 8) : nullptr;
+        uint32_t self = srv && firstPC ? firstPC(srv) : 0x7f000000;     // OBJECT_SELF: the player
+        if (vm && *vm && str && run && self != 0x7f000000) { str(&code, line + 4); Log("dev: nss %08x -> %d", self, run(*vm, &code, self, 1, 1)); }
+        return;
+    }
     if (strncmp(line, "loadsave ", 9) == 0) {
         void HubSystem_DevLoad(int); HubSystem_DevLoad(atoi(line + 9));
         return;

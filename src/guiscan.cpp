@@ -11,6 +11,7 @@
 #include "loot.h"
 #include "store.h"
 #include "rest.h"
+#include "death.h"
 #include <windows.h>
 #include <map>
 #include <vector>
@@ -41,7 +42,7 @@ PanelFn fHide = nullptr, o_UnHide = nullptr;
 // game showing them and our per-frame update hiding them again (that frame reads as a flash / blink)
 bool KeepHidden(void* p) {
     return Dialog_KeepHidden(p) || CharPanel_KeepHidden(p) || Popup_KeepHidden(p) || Loot_KeepHidden(p) ||
-           Store_KeepHidden(p) || Rest_KeepHidden(p);
+           Store_KeepHidden(p) || Rest_KeepHidden(p) || Death_KeepHidden(p);
 }
 void hk_UnHide(void* p) {
     if (p && KeepHidden(p)) {

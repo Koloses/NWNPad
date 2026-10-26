@@ -55,6 +55,7 @@ double g_actTime = 0;
 struct Save { std::string dir, name, nameRaw, file; int number = 0; int y = 0, mo = 0, d = 0, h = 0, mi = 0; uint32_t thumb = 0; bool thumbTried = false; };
 std::vector<Save> g_saves;
 enum Mode { M_MAIN, M_SAVE, M_LOAD } g_mode = M_MAIN;
+bool g_fromDeath = false;          // save list opened from the death screen: Back returns there
 int g_lsel = 0, g_lscroll = 0;
 int g_confirm = -1;
 std::string g_saveRoot;
@@ -233,12 +234,12 @@ void Do(Act a) {
     if (a == A_SAVECHAR) { g_waiting = false; Hub_Toast("Character saved"); }
 }
 
-void Open() { g_mode = M_MAIN; g_confirm = -1; }
+void Open() { g_mode = M_MAIN; g_confirm = -1; g_fromDeath = false; }
 
 void ListInput() {
     int extra = g_mode == M_SAVE ? 1 : 0;        // "new save" row
     int n = (int)g_saves.size() + extra;
-    if (g_pad.Pressed(PB_B)) { if (g_confirm >= 0) g_confirm = -1; else g_mode = M_MAIN; return; }
+    if (g_pad.Pressed(PB_B)) { if (g_confirm >= 0) g_confirm = -1; else if (g_fromDeath) Hub_Close(); else g_mode = M_MAIN; return; }
     int old = g_lsel;
     if (n > 0) {
         if (g_pad.Repeat(PB_DUP) || g_pad.Repeat(PB_LUP)) g_lsel = (g_lsel + n - 1) % n;
@@ -405,6 +406,12 @@ void HubSystem_Update() {
         ((fn)A(VA_GuiInGame_HandleOptionsButton))(GIG());   // toggles it closed
         if (Player()) Hub_ShowTab("System");
     }
+}
+
+// the death screen's "Load game": the System page with the save list
+void HubSystem_ShowLoad() {
+    Hub_ShowTab("System");
+    ReadSaves(); g_mode = M_LOAD; g_lsel = 0; g_lscroll = 0; g_confirm = -1; g_fromDeath = true;
 }
 
 // developer: load the save with this number

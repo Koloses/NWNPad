@@ -22,6 +22,7 @@
 #include "charpanel.h"
 #include "store.h"
 #include "rest.h"
+#include "death.h"
 #include "game.h"
 #include "gamedata.h"
 #include "hooks.h"
@@ -43,6 +44,7 @@ bool UI_PanelHandled(void* panel) {
     if (panel && panel == Loot_Panel() && Loot_Active()) return true;
     if (Store_PanelHandled(panel)) return true;
     if (Rest_KeepHidden(panel)) return true;
+    if (Death_KeepHidden(panel)) return true;
     if (Popup_Handled(panel)) return true;
     if (CharPanel_Handled(panel)) return true;
     return false;
@@ -64,6 +66,7 @@ bool Control_UIWantsInput() {
     Popup_Frame();
     CharPanel_Frame();
     if (Rest_Input()) return true;
+    if (Death_Input()) { Cursor_Update(false); return true; }
     if (Popup_Input()) { Cursor_Update(false); return true; }
     if (CharPanel_Input()) { Cursor_Update(false); return true; }
     if (Dialog_Input()) { Cursor_Update(false); return true; }
@@ -125,18 +128,19 @@ static void UI_Frame(HDC hdc) {
         bool hub = Hub_Open() && !Cursor_Active();
         bool loot = Loot_Active() && !Cursor_Active();
         bool store = Store_Active() && !Cursor_Active();
-        if (!Dialog_Active() && !Cursor_Active() && !hub && !loot && !store && !CharPanel_Active() && UI_PadPresent()) { HUD_Draw(); Party_Draw(); }
+        if (!Dialog_Active() && !Cursor_Active() && !hub && !loot && !store && !CharPanel_Active() && UI_PadPresent() && !Death_Active()) { HUD_Draw(); Party_Draw(); }
         Dialog_Draw();
         if (hub) Hub_Draw();
         if (loot) Loot_Draw();
         if (store) Store_Draw();
     }
     if (Rest_Active()) Rest_Draw();
+    Death_Draw();
     if (UI_PadPresent()) CharPanel_Draw();
     if (UI_PadPresent()) Popup_Draw();
     if (g_pad.connected) Cursor_Draw();
     bool menus = Hub_Open() || Loot_Active() || Store_Active();
-    if (pl && g_pad.connected && !Cursor_Active() && !Dialog_Active() && (!menus || g_ctl.radialOpen)) {
+    if (pl && g_pad.connected && !Cursor_Active() && !Dialog_Active() && !Death_Active() && (!menus || g_ctl.radialOpen)) {
         if (g_ctl.radialOpen) {
             HintItem h[] = {{GL_LS, "Choose"}, {GL_A, "Select"}, {GL_Y, "Back"}, {GL_B, "Close"}};
             UI_DrawHints(h, 4, 0.95f);
