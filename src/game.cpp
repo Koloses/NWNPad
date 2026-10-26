@@ -1,6 +1,7 @@
 #include "game.h"
 #include "log.h"
 #include "hooks.h"
+#include "talklog.h"
 #include <windows.h>
 #include <cmath>
 
@@ -34,6 +35,7 @@ static LoadFn_t o_LoadGame = nullptr, o_LoadModule = nullptr;     // 5 and 7 reg
 static int hk_LoadGame(void* a, void* b, void* c, void* d, void* e, void* f, void* g) {
     InterlockedIncrement(&g_loadDepth);
     int r = o_LoadGame(a, b, c, d, e, f, g);
+    if (c) TalkLog_GameLoaded((uint32_t)(uintptr_t)b, std::string(F<char*>(c, 0) ? F<char*>(c, 0) : "", F<uint32_t>(c, 8)));
     g_loadEnd = GetTickCount64(); InterlockedDecrement(&g_loadDepth);
     return r;
 }

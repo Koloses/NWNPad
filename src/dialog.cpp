@@ -10,6 +10,7 @@
 #include "text.h"
 #include "log.h"
 #include "ui.h"
+#include "talklog.h"
 #include <windows.h>
 #include <vector>
 #include <string>
@@ -60,6 +61,7 @@ void hk_ShowDialogEntry(void* gig, void* text, uint32_t p3, uint32_t speaker) {
     DS.textTime = g_pad.now;
     DS.active = true;
     Log("dialog entry from %08x '%s'", speaker, DS.name.c_str());
+    TalkLog_Npc(DS.name, DS.text);
     o_ShowDialogEntry(gig, text, p3, speaker);
     HidePanel();
 }
@@ -70,8 +72,16 @@ void hk_ShowDialogReplies(void* gig, int n, void* strs, uint32_t* ids, int p4, u
     DS.hasReplies = true;
     DS.sel = 0; DS.scroll = 0;
     Log("dialog replies %d (p4=%d p5=%u p6=%d)", n, p4, p5, p6);
+    TalkLog_Replies(DS.replies);
     o_ShowDialogReplies(gig, n, strs, ids, p4, p5, p6);
     HidePanel();
+}
+
+// every way of answering (pad, mouse, number keys) ends up here
+void (*o_HandleDialogSelection)(void* gig, int idx) = nullptr;
+void hk_HandleDialogSelection(void* gig, int idx) {
+    TalkLog_Choice(idx);
+    o_HandleDialogSelection(gig, idx);
 }
 
 void Select(int idx) {
@@ -86,6 +96,8 @@ void Select(int idx) {
 void Dialog_InstallHooks() {
     o_ShowDialogEntry = (decltype(o_ShowDialogEntry))Hook_Create(VA_ShowDialogEntry, (void*)hk_ShowDialogEntry, "ShowDialogEntry");
     o_ShowDialogReplies = (decltype(o_ShowDialogReplies))Hook_Create(VA_ShowDialogReplies, (void*)hk_ShowDialogReplies, "ShowDialogReplies");
+    o_HandleDialogSelection = (decltype(o_HandleDialogSelection))Hook_Create(VA_HandleDialogSelection, (void*)hk_HandleDialogSelection, "HandleDialogSelection");
+    TalkLog_InstallHooks();
     fHide = (PanelFn)GetProcAddress(GetModuleHandleA(nullptr), "?Hide@CGuiPanel@@QEAAXXZ");
 }
 

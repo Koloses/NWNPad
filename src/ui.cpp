@@ -23,6 +23,7 @@
 #include "store.h"
 #include "rest.h"
 #include "death.h"
+#include "talklog.h"
 #include "game.h"
 #include "gamedata.h"
 #include "hooks.h"
@@ -136,6 +137,7 @@ static void UI_Frame(HDC hdc) {
     }
     if (Rest_Active()) Rest_Draw();
     Death_Draw();
+    TalkLog_Frame(Dialog_Panel() != nullptr);
     if (UI_PadPresent()) CharPanel_Draw();
     if (UI_PadPresent()) Popup_Draw();
     if (g_pad.connected) Cursor_Draw();

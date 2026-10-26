@@ -144,8 +144,12 @@ LB / RB switch tabs: Inventory, Character, Quickbar, Spells, Journal, Map, Syste
   have the feat and a slot of the right level; clerics also fill their domain slots), X clears
   it; new preparations are ready after resting.
   The right pane shows the spell's description (right stick scrolls).
-* **Journal** - active and completed quests (X switches), the newest entry of the selected
-  quest on the right.
+* **Journal** - active quests, done quests and talks (d-pad left / right switches), the newest
+  entry of the selected quest on the right; X follows a quest on the minimap. Every conversation is
+  recorded (what was said and the replies you picked) and kept with your saves (online: per character
+  in Documents\Neverwinter Nights\NWNPad). A conversation during which (or right after which) a quest's
+  journal entry changed is linked to that quest: Y on the quest shows those conversations (d-pad jumps
+  between them, right stick scrolls, B goes back). "Talks" lists all conversations, newest first.
 * **Map** - explored part of the current area with your position and facing, party members,
   map notes with their names above the dots, and quest markers (diamonds with the quest's name:
   orange for someone here, blue "(exit)" for the way to another area; the followed one pulses).
