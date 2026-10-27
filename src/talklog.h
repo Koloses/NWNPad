@@ -18,5 +18,6 @@ void TalkLog_Choice(int index);                                      // the repl
 void TalkLog_Replies(const std::vector<std::string>& replies);
 void TalkLog_Frame(bool conversationOpen);
 void TalkLog_GameLoaded(uint32_t number, const std::string& name);   // server LoadGame (single player)
+uint32_t TalkLog_Version();                                          // changes whenever the log does
 std::vector<Talk> TalkLog_All();                                     // newest first
 std::vector<Talk> TalkLog_ForQuest(const std::string& title);        // newest first

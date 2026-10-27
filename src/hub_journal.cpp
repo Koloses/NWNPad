@@ -13,6 +13,7 @@
 #include <cmath>
 #include <string>
 #include <vector>
+#include <set>
 
 using namespace G;
 using namespace R;
@@ -27,6 +28,7 @@ struct Quest { std::string name, text, tag; int day = 0, time = 0; bool complete
 std::vector<Quest> g_q[2];      // 0 active, 1 completed
 int g_list = 0, g_sel[3] = {0, 0, 0}, g_scroll[3] = {0, 0, 0};   // list 2: conversations
 std::vector<Talk> g_talks;      // every conversation, newest first
+std::set<std::string> g_talkQuests;   // quests (lower case) with a conversation
 std::vector<Talk> g_qtalks;     // conversations of the selected quest
 std::string g_qtalksFor;
 bool g_view = false;            // the selected quest's conversations instead of its journal text
@@ -65,11 +67,15 @@ void Read(bool force = false) {
     g_lastRead = g_pad.now;
     void* in = Internal();
     void* j = in ? F<void*>(in, 0x70) : nullptr;
-    if (!j) { g_q[0].clear(); g_q[1].clear(); g_talks = TalkLog_All(); return; }
+    static uint32_t talkVer = 0;
+    if (TalkLog_Version() != talkVer) {
+        talkVer = TalkLog_Version(); g_talks = TalkLog_All(); g_qtalksFor = "\x01";
+        g_talkQuests.clear();
+        for (auto& t : g_talks) for (auto& q : t.quests) g_talkQuests.insert(Lower(q));
+    }
+    if (!j) { g_q[0].clear(); g_q[1].clear(); return; }
     ReadList((char*)j + 0x28, g_q[0]);
     ReadList(j, g_q[1]);
-    g_talks = TalkLog_All();
-    g_qtalksFor = "\x01";
     for (int l = 0; l < 2; l++) {
         if (g_sel[l] >= (int)g_q[l].size()) g_sel[l] = (int)g_q[l].size() - 1;
         if (g_sel[l] < 0) g_sel[l] = 0;
@@ -142,11 +148,7 @@ void Input() {
     if (g_pad.Pressed(PB_B)) Hub_Close();
 }
 
-bool QuestHasTalks(const std::string& title) {
-    std::string n = Lower(title);
-    for (auto& t : g_talks) for (auto& q : t.quests) if (Lower(q) == n) return true;
-    return false;
-}
+bool QuestHasTalks(const std::string& title) { return g_talkQuests.count(Lower(title)) != 0; }
 
 // conversations as a transcript: a header per conversation (who, where), the NPC's lines, your replies
 // indented; scrolled with the right stick, the d-pad jumps to the previous / next conversation

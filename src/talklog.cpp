@@ -37,6 +37,7 @@ std::vector<std::string> g_replies;
 std::string g_owner;                                  // the hero this log belongs to
 std::string g_onlineFile;                             // online: the file of the current character
 bool g_dirty = false;
+uint32_t g_ver = 1;                                   // bumped on every change (readers copy only then)
 
 double Now() { return GetTickCount64() / 1000.0; }
 std::string Norm(std::string s) {
@@ -98,7 +99,7 @@ bool Write(const std::string& path) {
 }
 void Read(const std::string& path) {
     std::lock_guard<std::recursive_mutex> lk(g_mx);
-    g_talks.clear(); g_open = false; g_seq = 0; g_owner.clear();
+    g_talks.clear(); g_open = false; g_seq = 0; g_owner.clear(); g_ver++;
     FILE* f = fopen(path.c_str(), "rb");
     if (!f) { Log("talk: no log in %s", path.c_str()); return; }
     std::string line; int c;
@@ -119,7 +120,7 @@ void Read(const std::string& path) {
 void Close() {
     if (!g_open) return;
     g_open = false; g_closedAt = Now();
-    if (!g_talks.empty() && g_talks.back().lines.empty()) g_talks.pop_back();
+    if (!g_talks.empty() && g_talks.back().lines.empty()) g_talks.pop_back(); g_ver++;
     g_dirty = true;
 }
 
@@ -135,7 +136,7 @@ void hk_JournalUpdated(void* j, int deferrable, int completed, void* name) {
             auto& q = g_talks.back().quests;
             bool have = false;
             for (auto& x : q) if (Norm(x) == Norm(title)) have = true;
-            if (!have) { q.push_back(title); g_dirty = true; Log("talk: '%s' linked to the conversation with %s", title.c_str(), g_talks.back().npc.c_str()); }
+            if (!have) { g_ver++; q.push_back(title); g_dirty = true; Log("talk: '%s' linked to the conversation with %s", title.c_str(), g_talks.back().npc.c_str()); }
         }
     }
     o_JournalUpdated(j, deferrable, completed, name);
@@ -182,7 +183,7 @@ void TalkLog_Npc(const std::string& who, const std::string& text) {
     }
     auto& ls = g_talks.back().lines;
     if (!ls.empty() && !ls.back().player && ls.back().text == text) return;     // the same line shown again
-    if (ls.size() < MaxLines) { TalkLine l; l.who = who; l.text = text; ls.push_back(l); }
+    if (ls.size() < MaxLines) { TalkLine l; l.who = who; l.text = text; ls.push_back(l); } g_ver++;
     g_replies.clear();
 }
 void TalkLog_Replies(const std::vector<std::string>& r) { std::lock_guard<std::recursive_mutex> lk(g_mx); g_replies = r; }
@@ -193,7 +194,7 @@ void TalkLog_Choice(int i) {
     if (k.size() > 2 && k.front() == '[' && k.back() == ']') k = k.substr(1, k.size() - 2);
     if (k == "continue" || k == "end dialogue" || k == "end conversation" || k == "leave") return;   // nothing said
     auto& ls = g_talks.back().lines;
-    if (ls.size() < MaxLines) { TalkLine l; l.player = true; l.text = g_replies[i]; ls.push_back(l); }
+    if (ls.size() < MaxLines) { TalkLine l; l.player = true; l.text = g_replies[i]; ls.push_back(l); } g_ver++;
     g_replies.clear();
 }
 
@@ -217,7 +218,7 @@ void TalkLog_Frame(bool conversationOpen) {
     if (!Online()) {
         // a different hero (a new game): a new log
         if (me != g_owner) {
-            if (!g_owner.empty()) { g_talks.clear(); g_open = false; g_seq = 0; Log("talk: new hero '%s', empty log", me.c_str()); }
+            if (!g_owner.empty()) { g_ver++; g_talks.clear(); g_open = false; g_seq = 0; Log("talk: new hero '%s', empty log", me.c_str()); }
             g_owner = me;
         }
         return;
@@ -249,3 +250,5 @@ std::vector<Talk> TalkLog_ForQuest(const std::string& title) {
         for (auto& q : it->quests) if (Norm(q) == n) { r.push_back(*it); break; }
     return r;
 }
+
+uint32_t TalkLog_Version() { return g_ver; }
