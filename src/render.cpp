@@ -43,7 +43,7 @@ struct V {
     float a0, a1;                    // arc range
 };
 static std::vector<V> g_verts;
-struct Batch { GLuint tex; size_t first, count; int clip; };
+struct Batch { GLuint tex; size_t first, count; int clip; bool sampled; };   // sampled: a quad reads tex
 static std::vector<Batch> g_batches;
 struct Clip { float x, y, w, h; };
 static std::vector<Clip> g_clipStack, g_clips;
@@ -137,9 +137,16 @@ extern float UI_UserScale();
 extern GLuint Font_Texture();
 
 // ---------------------------------------------------------------------------------------------
+// quads drawn by a shape mode that never reads the texture (fills, borders, shadows, arcs, flat) join the
+// current batch whatever its texture; a batch of only such quads takes the texture of the next one that
+// reads it. Draw order is unchanged; far fewer texture switches and draw calls.
 static void PushQuad(GLuint tex, const V& tl, const V& tr, const V& br, const V& bl) {
-    if (g_batches.empty() || g_batches.back().tex != tex || g_batches.back().clip != g_curClip)
-        g_batches.push_back({tex, g_verts.size(), 0, g_curClip});
+    float m = tl.mode;
+    bool samples = m < 0.5f || (m > 4.5f && m < 5.5f) || m > 6.5f;
+    Batch* b = g_batches.empty() ? nullptr : &g_batches.back();
+    bool join = b && b->clip == g_curClip && (!samples || b->tex == tex || !b->sampled);
+    if (!join) { g_batches.push_back({tex, g_verts.size(), 0, g_curClip, false}); b = &g_batches.back(); }
+    if (samples && !b->sampled) { b->tex = tex; b->sampled = true; }
     g_verts.push_back(tl); g_verts.push_back(tr); g_verts.push_back(br);
     g_verts.push_back(tl); g_verts.push_back(br); g_verts.push_back(bl);
     g_batches.back().count += 6;

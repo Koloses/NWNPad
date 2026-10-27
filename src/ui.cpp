@@ -23,6 +23,7 @@
 #include "store.h"
 #include "rest.h"
 #include "death.h"
+#include "prof.h"
 #include "talklog.h"
 #include "game.h"
 #include "gamedata.h"
@@ -156,14 +157,17 @@ static void UI_Frame(HDC hdc) {
         }
     }
     if (g_cfg.showFps) Fps_Draw();
-    R::End();
+    { ProfScope ps(PS_GL); R::End(); }
 }
 
 static BOOL WINAPI hk_SwapBuffers(HDC hdc) {
     G::NewFrame();
     GLDiag_PreOverlay();
     Fps_Tick();
-    if (g_cfg.enabled) UI_Frame(hdc);
+    Prof_Frame();
+    Log_Tick();
+    Res_NewFrame();
+    if (g_cfg.enabled) { ProfScope ps(PS_UI); UI_Frame(hdc); }
     GLDiag_PostOverlay();
     return o_SwapBuffers(hdc);
 }

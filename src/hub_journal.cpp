@@ -152,22 +152,33 @@ bool QuestHasTalks(const std::string& title) { return g_talkQuests.count(Lower(t
 
 // conversations as a transcript: a header per conversation (who, where), the NPC's lines, your replies
 // indented; scrolled with the right stick, the d-pad jumps to the previous / next conversation
-void DrawTalks(const std::vector<Talk>& v, float x, float y, float w, float h, float a) {
+// key: which conversations these are (the layout is kept while it stays the same)
+void DrawTalks(const std::vector<Talk>& v, int key, float x, float y, float w, float h, float a) {
     const float fs = px(21), sp = 1.25f;
     const float indent = px(34);
-    struct Blk { float top; };
-    std::vector<float> tops;
-    // measure
-    float total = 0;
-    for (size_t k = 0; k < v.size(); k++) {
-        tops.push_back(total);
-        total += px(36);                                     // header
-        if (!v[k].quests.empty()) total += px(24);
-        for (auto& l : v[k].lines) {
-            std::string t = l.player || l.who == v[k].npc || l.who.empty() ? l.text : l.who + ": " + l.text;
-            total += TextWrap(FONT_BODY, fs, 0, 0, w - px(20) - (l.player ? indent : 0), t.c_str(), Theme::Text, 0, sp, true) + px(10);
+    // layout (each line's text and height), worked out again only when the conversations or the width change
+    struct Line { std::string text; float h; bool player; };
+    static std::vector<std::vector<Line>> lines;
+    static std::vector<float> tops;
+    static float total = 0, lastW = -1, lastFs = -1;
+    static int lastKey = -1; static size_t lastN = (size_t)-1; static uint32_t lastVer = 0;
+    if (w != lastW || fs != lastFs || key != lastKey || v.size() != lastN || TalkLog_Version() != lastVer) {
+        lastW = w; lastFs = fs; lastKey = key; lastN = v.size(); lastVer = TalkLog_Version();
+        lines.assign(v.size(), {}); tops.clear(); total = 0;
+        for (size_t k = 0; k < v.size(); k++) {
+            tops.push_back(total);
+            total += px(36);                                     // header
+            if (!v[k].quests.empty()) total += px(24);
+            for (auto& l : v[k].lines) {
+                Line ln;
+                ln.text = l.player || l.who == v[k].npc || l.who.empty() ? l.text : l.who + ": " + l.text;
+                ln.player = l.player;
+                ln.h = TextWrap(FONT_BODY, fs, 0, 0, w - px(20) - (l.player ? indent : 0), ln.text.c_str(), Theme::Text, 0, sp, true);
+                total += ln.h + px(10);
+                lines[k].push_back(std::move(ln));
+            }
+            total += px(26);
         }
-        total += px(26);
     }
     float maxS = fmaxf(0.0f, total - h + px(10));
     if (g_jump) {                                            // to the previous / next conversation's header
@@ -180,8 +191,10 @@ void DrawTalks(const std::vector<Talk>& v, float x, float y, float w, float h, f
     }
     g_talkScroll = fminf(fmaxf(g_talkScroll, 0.0f), maxS);
     PushClip(x - px(4), y, w + px(8), h);
-    float cy = y - g_talkScroll;
     for (size_t k = 0; k < v.size(); k++) {
+        float cy = y - g_talkScroll + tops[k];
+        float next = k + 1 < tops.size() ? y - g_talkScroll + tops[k + 1] : y - g_talkScroll + total;
+        if (next < y - px(40) || cy > y + h + px(40)) continue;    // conversation not in view
         const Talk& t = v[k];
         RoundRect(x, cy + px(2), w - px(20), px(30), px(8), Col(60, 48, 30, (int)(110 * a)));
         Text(FONT_TITLE, px(21), x + px(12), cy + px(5), t.npc.empty() ? "(someone)" : t.npc.c_str(), Theme::Gold.alpha(a));
@@ -196,17 +209,14 @@ void DrawTalks(const std::vector<Talk>& v, float x, float y, float w, float h, f
             TextFit(FONT_BODY, px(16), x + px(12), cy, w - px(40), qs.c_str(), Theme::GoldDim.alpha(a));
             cy += px(24);
         }
-        for (auto& l : t.lines) {
-            std::string s = l.player || l.who == t.npc || l.who.empty() ? l.text : l.who + ": " + l.text;
-            float lx = x + (l.player ? indent : px(4)), lw = w - px(20) - (l.player ? indent : 0);
-            float lh = TextWrap(FONT_BODY, fs, 0, 0, lw, s.c_str(), Theme::Text, 0, sp, true);
-            if (cy + lh > y - px(40) && cy < y + h + px(40)) {
-                if (l.player) RoundRect(lx - px(12), cy + px(4), px(3), lh - px(6), px(1), Col(150, 185, 225, (int)(200 * a)));
-                TextWrap(FONT_BODY, fs, lx, cy, lw, s.c_str(), (l.player ? Col(176, 200, 228) : Theme::Text).alpha(0.94f * a), 0, sp);
+        for (auto& ln : lines[k]) {
+            float lx = x + (ln.player ? indent : px(4)), lw = w - px(20) - (ln.player ? indent : 0);
+            if (cy + ln.h > y - px(40) && cy < y + h + px(40)) {
+                if (ln.player) RoundRect(lx - px(12), cy + px(4), px(3), ln.h - px(6), px(1), Col(150, 185, 225, (int)(200 * a)));
+                TextWrap(FONT_BODY, fs, lx, cy, lw, ln.text.c_str(), (ln.player ? Col(176, 200, 228) : Theme::Text).alpha(0.94f * a), 0, sp);
             }
-            cy += lh + px(10);
+            cy += ln.h + px(10);
         }
-        cy += px(26);
     }
     PopClip();
     if (maxS > 0) {
@@ -287,8 +297,10 @@ void Draw(float x, float y, float w, float h, float a) {
             return;
         }
         if (g_talkFor != 20000 + s) { g_talkFor = 20000 + s; g_talkScroll = 0; }
-        std::vector<Talk> one(1, g_talks[s]);
-        DrawTalks(one, rx, ry, rw, y + h - px(30) - ry, a);
+        static std::vector<Talk> one;
+        static int oneFor = -1; static uint32_t oneVer = 0;
+        if (oneFor != s || oneVer != TalkLog_Version()) { one.assign(1, g_talks[s]); oneFor = s; oneVer = TalkLog_Version(); }
+        DrawTalks(one, 20000 + s, rx, ry, rw, y + h - px(30) - ry, a);
         return;
     }
     if (n == 0) {
@@ -305,7 +317,7 @@ void Draw(float x, float y, float w, float h, float a) {
         ry += th + px(4);
         Text(FONT_BODY_BOLD, px(18), rx, ry, "Conversations", Theme::TextDim.alpha(a));
         ry += px(34);
-        DrawTalks(QuestTalks(), rx, ry, rw, y + h - px(30) - ry, a);
+        DrawTalks(QuestTalks(), 30000 + key, rx, ry, rw, y + h - px(30) - ry, a);
         return;
     }
     if (g_textFor != key) { g_textFor = key; g_textScroll = 0; }

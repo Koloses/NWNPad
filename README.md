@@ -104,7 +104,9 @@ too (your class, an item, an earlier event), so now and then someone won't offer
 `QuestMarker=0` in `[Interface]` turns it off.
 
 **Frame rate:** `ShowFPS=1` in `[Interface]` shows frames per second, the average and worst frame
-time of the last second and the OpenGL renderer (e.g. zink on your GPU) in the top-left corner.
+time of the last second and the OpenGL renderer (e.g. zink on your GPU) in the top-left corner. Frames
+where NWNPad itself takes more than 8 ms are written to NWNPad.log ("prof:"); `Profile=1` in
+`[Debug]` adds a summary every 10 seconds.
 
 **Corpses** are no longer targeted (their loot is in the bag they drop); the pause pointer still
 reaches them.

@@ -52,8 +52,9 @@ bool Online() {
     return am && *am && F<int>(*am, 0x28) != 0;
 }
 std::string Docs() {
-    char d[MAX_PATH];
-    return SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_PERSONAL, nullptr, 0, d)) ? std::string(d) + "\\Neverwinter Nights\\" : std::string();
+    static std::string docs;
+    if (docs.empty()) { char d[MAX_PATH]; if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_PERSONAL, nullptr, 0, d))) docs = std::string(d) + "\\Neverwinter Nights\\"; }
+    return docs;
 }
 std::string AreaName() {
     void* pl = Player(); void* ar = pl ? F<void*>(pl, OFS::Obj_Area) : nullptr;

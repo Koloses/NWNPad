@@ -78,11 +78,13 @@ void Pad_Update() {
         XST st;
         if (g_userIndex >= 0 && pGetState(g_userIndex, &st) == 0) { gp = st.Gamepad; ok = true; }
         else {
+            // one slot at a time (an empty slot can take milliseconds to answer), all four within a second
             static double nextScan = 0;
+            static int slot = 0;
             if (now >= nextScan) {
-                nextScan = now + 1.0;
-                for (int i = 0; i < 4; i++)
-                    if (pGetState(i, &st) == 0) { g_userIndex = i; gp = st.Gamepad; ok = true; Log("pad connected on slot %d", i); break; }
+                nextScan = now + 0.25;
+                int i = slot; slot = (slot + 1) & 3;
+                if (pGetState(i, &st) == 0) { g_userIndex = i; gp = st.Gamepad; ok = true; Log("pad connected on slot %d", i); }
                 if (!ok) g_userIndex = -1;
             }
         }

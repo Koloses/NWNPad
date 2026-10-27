@@ -17,6 +17,7 @@ void Config_Load(const char* ini) {
     c.minimap = geti("Interface", "Minimap", 1, ini);
     c.questMarker = geti("Interface", "QuestMarker", 1, ini);
     c.showFps = geti("Interface", "ShowFPS", 0, ini);
+    c.profile = geti("Debug", "Profile", 0, ini);
     { char v[16] = {}; GetPrivateProfileStringA("Interface", "InventoryView", "grid", v, sizeof v, ini); c.inventoryGrid = _stricmp(v, "list") != 0; }
     c.newDialog = geti("Interface", "GamepadDialogue", 1, ini);
     c.newMenus = geti("Interface", "GamepadMenus", 1, ini);

@@ -27,6 +27,7 @@
 #include "text.h"
 #include "pad.h"
 #include "gamedata.h"
+#include "prof.h"
 #include <algorithm>
 #include <windows.h>
 #include <cstring>
@@ -117,6 +118,7 @@ std::string Lower(std::string s) { for (auto& c : s) c = (char)tolower((unsigned
 struct JCall { std::string quest; int entry = -1; std::vector<std::string> tags; };   // lower case
 struct NcsInfo { bool exists = false; std::vector<JCall> calls; std::vector<std::string> strings; };
 std::map<std::string, NcsInfo> g_ncs;
+int g_loads = 0;                                           // scripts / conversations read from the game's resources (scan slicing)
 const uint16_t RT_AddJournalQuestEntry = 367;              // nwscript.nss routine number
 const NcsInfo& Script(const std::string& resref) {
     auto it = g_ncs.find(resref);
@@ -125,6 +127,7 @@ const NcsInfo& Script(const std::string& resref) {
     std::vector<uint8_t> d;
     if (!resref.empty() && Res_Load(resref.c_str(), 2010, d) && d.size() > 13 && memcmp(d.data(), "NCS V1.0", 8) == 0) {
         info.exists = true;
+        g_loads++;
         struct Op { char k; int pos; int v; std::string s; };    // S string, I int, A action, Z conditional jump (v = target)
         std::vector<Op> ops;
         size_t i = 13;
@@ -188,6 +191,7 @@ const DlgInfo& Dialog(const std::string& resref) {
     std::vector<uint8_t> v;
     Gff g;
     if (Res_Load(resref.c_str(), 2029, v) && g.Load(std::move(v))) {
+        g_loads++;
         // conditions of the links to each entry (0) / reply (1)
         std::map<uint32_t, std::set<std::string>> cond[2];
         std::vector<uint32_t> nodes[2];
@@ -215,12 +219,16 @@ const DlgInfo& Dialog(const std::string& resref) {
                     else if (f.label == "QuestEntry" && f.type == 4) { e = f.data; hasE = true; }
                     else if (f.label == "Script" && f.type == 11) act = Lower(g.Ref(f));
                 }
+                // only lines that write a journal entry matter (their conditions are read only then)
+                bool sets = !q.empty() && hasE;
+                const NcsInfo* as = act.empty() ? nullptr : &Script(act);
+                if (!sets && !(as && !as->calls.empty())) continue;
                 std::vector<std::string> ct;
                 auto c = cond[kind].find(ni);
                 if (c != cond[kind].end()) for (auto& cs : c->second) for (auto& w : Script(cs).strings) ct.push_back(w);
-                if (!q.empty() && hasE) info.sets.push_back({q, e, ct});
-                if (!act.empty())
-                    for (auto& jc : Script(act).calls) {
+                if (sets) info.sets.push_back({q, e, ct});
+                if (as)
+                    for (auto& jc : as->calls) {
                         DlgSet ds{jc.quest, (uint32_t)(jc.entry < 0 ? 0x7fffffff : jc.entry), ct};
                         ds.tags.insert(ds.tags.end(), jc.tags.begin(), jc.tags.end());
                         info.sets.push_back(ds);
@@ -347,8 +355,9 @@ const DlgInfo* ObjDialog(void* o, uint8_t type) {
 // scripts of a server object that write journal entries: the event scripts are CExoStrings in a block of
 // the object (module, area, creature, placeable, door, trigger); every string there naming a compiled
 // script is checked. Cached per object.
-std::vector<std::string> ObjScripts(void* o, int type) {
-    static std::map<void*, std::pair<uint32_t, std::vector<std::string>>> cache;
+std::map<void*, std::pair<uint32_t, std::vector<std::string>>> g_objScripts;
+const std::vector<std::string>& ObjScripts(void* o, int type) {
+    auto& cache = g_objScripts;
     uint32_t id = type == 3 || type == 4 ? 0 : F<uint32_t>(o, 8);
     auto it = cache.find(o);
     if (it != cache.end() && it->second.first == id) return it->second.second;
@@ -372,8 +381,9 @@ std::vector<std::string> ObjScripts(void* o, int type) {
         name = Lower(name);
         if (!Script(name).calls.empty() && std::find(r.begin(), r.end(), name) == r.end()) r.push_back(name);
     }
-    cache[o] = {id, r};
-    return r;
+    auto& slot = cache[o];
+    slot = {id, std::move(r)};
+    return slot.second;
 }
 std::string SrvTag(void* g) {
     const char* p = F<const char*>(g, 0x20); uint32_t n = F<uint32_t>(g, 0x28);
@@ -422,7 +432,7 @@ bool Begin(void* srv, void* sp, void* mod) {
     J = Job();
     J.running = true;
     J.mod = mod;
-    if (mod != g_jrlModule) { g_jrlModule = mod; g_dlg.clear(); g_ncs.clear(); LoadJournalDefs(); }
+    if (mod != g_jrlModule) { g_jrlModule = mod; g_dlg.clear(); g_ncs.clear(); g_objScripts.clear(); LoadJournalDefs(); }
     J.act = ActiveQuests(sp);
     for (auto& a : J.act) J.state[a.tag] = a.state;
     J.me = Id(Player()) & 0x7fffffffu;
@@ -616,6 +626,7 @@ void Finish(void* srv, void* sp) {
 
 // one slice of the scan, at most ~budget ms
 void Step(double budgetMs) {
+    g_loads = 0;
     LARGE_INTEGER f, t0, t; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
     auto elapsed = [&]() { QueryPerformanceCounter(&t); return (t.QuadPart - t0.QuadPart) * 1000.0 / f.QuadPart; };
     void* pl = Player();
@@ -638,6 +649,7 @@ void Step(double budgetMs) {
             uint32_t* ids = F<uint32_t*>(ar, 0x228);
             int n = F<int>(ar, 0x230);
             for (; ids && J.i < n && J.i < 20000; ) {
+                if (g_loads > 0) return;                     // a conversation / script was read this frame: the rest next frame
                 Object(areas[J.ai], ids[J.i++]);
                 if (elapsed() >= budgetMs) return;
             }
@@ -677,6 +689,7 @@ void Update() {
     lastStep = g_pad.now;
     if (G::Loading()) { J.running = false; S.lastScan = g_pad.now; return; }
     if (!J.running && g_pad.now - S.lastScan <= 2.0) return;
+    ProfScope ps(PS_QUEST);
     LARGE_INTEGER f, t0, t1; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
     Step(1.0);
     QueryPerformanceCounter(&t1);

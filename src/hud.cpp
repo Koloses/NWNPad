@@ -17,6 +17,7 @@
 #include <deque>
 #include <string>
 #include "questmark.h"
+#include "prof.h"
 #include <cmath>
 #include <cstring>
 
@@ -412,6 +413,7 @@ static void DrawFeed() {
 
 void HUD_Draw() {
     if (!g_cfg.newHud) return;
+    ProfScope ps(PS_HUD);
     void* pl = Player();
     if (!pl) return;
     DrawHero(pl);
@@ -419,7 +421,7 @@ void HUD_Draw() {
     DrawTarget(pl);
     DrawActions();
     DrawFeed();
-    if (g_cfg.minimap) { float ms = px(230); Map_DrawMinimap(W() - px(40) - ms, px(40), ms, 0.95f); }
+    if (g_cfg.minimap) { ProfScope ps(PS_MAP); float ms = px(230); Map_DrawMinimap(W() - px(40) - ms, px(40), ms, 0.95f); }
     if (GD::IsPaused()) {
         float w = px(560), h = px(52);
         float y = px(136);

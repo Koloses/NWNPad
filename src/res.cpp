@@ -130,12 +130,25 @@ static uint32_t DecodeTGA(const std::vector<uint8_t>& v, int& w, int& h) {
     return t;
 }
 
+// textures load on the render thread: a few milliseconds' worth per frame, the rest on later frames
+// (an area's map tiles, a new portrait or icon set would otherwise all load in one frame)
+static double g_loadMs = 0;
+static int g_loads = 0;
+void Res_NewFrame() { g_loadMs = 0; g_loads = 0; }
+static bool LoadBudget() { return g_loads == 0 || g_loadMs < 3.0; }
+static double NowMs() { LARGE_INTEGER f, t; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t); return t.QuadPart * 1000.0 / f.QuadPart; }
+struct LoadTimer { double t0 = NowMs(); ~LoadTimer() { g_loadMs += NowMs() - t0; g_loads++; } };
+
 uint32_t Res_Texture(const char* resref, int* outW, int* outH) {
     if (!resref || !resref[0]) return 0;
-    std::string key(resref);
-    for (auto& c : key) c = (char)tolower((unsigned char)c);
+    char key0[40]; size_t n = 0;
+    for (; resref[n] && n < sizeof key0 - 1; n++) key0[n] = (char)tolower((unsigned char)resref[n]);
+    key0[n] = 0;
+    std::string key(key0, n);
     auto it = g_texCache.find(key);
     if (it != g_texCache.end()) { if (outW) *outW = it->second.w; if (outH) *outH = it->second.h; return it->second.tex; }
+    if (!LoadBudget()) { if (outW) *outW = 0; if (outH) *outH = 0; return 0; }   // next frame
+    LoadTimer lt;
     TexEntry e{0, 0, 0};
     std::vector<uint8_t> v;
     if (Res_Load(key.c_str(), 2033, v)) e.tex = DecodeDDS(v, e.w, e.h);   // DDS
@@ -152,6 +165,8 @@ uint32_t Res_TextureFile(const char* path, int* outW, int* outH) {
     std::string key = std::string("file:") + path;
     auto it = g_texCache.find(key);
     if (it != g_texCache.end()) { if (outW) *outW = it->second.w; if (outH) *outH = it->second.h; return it->second.tex; }
+    if (!LoadBudget()) { if (outW) *outW = 0; if (outH) *outH = 0; return 0; }   // next frame
+    LoadTimer lt;
     TexEntry e{0, 0, 0};
     FILE* f = fopen(path, "rb");
     if (f) {
@@ -197,6 +212,8 @@ uint32_t Res_PltTexture(const std::vector<std::string>& parts, const std::vector
     for (auto& c : key) c = (char)tolower((unsigned char)c);
     auto it = g_texCache.find(key);
     if (it != g_texCache.end()) { if (outW) *outW = it->second.w; if (outH) *outH = it->second.h; return it->second.tex; }
+    if (!LoadBudget()) { if (outW) *outW = 0; if (outH) *outH = 0; return 0; }   // next frame
+    LoadTimer lt;
     TexEntry e{0, 0, 0};
     std::vector<uint8_t> out;
     int W = 0, H = 0;
