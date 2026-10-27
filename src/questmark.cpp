@@ -27,6 +27,7 @@
 #include "text.h"
 #include "pad.h"
 #include "gamedata.h"
+#include "talklog.h"
 #include "prof.h"
 #include <algorithm>
 #include <windows.h>
@@ -116,10 +117,16 @@ std::string Lower(std::string s) { for (auto& c : s) c = (char)tolower((unsigned
 // ---- module data (cached) ----
 // ---- compiled scripts: AddJournalQuestEntry calls and the tags they depend on ----
 struct JCall { std::string quest; int entry = -1; std::vector<std::string> tags; };   // lower case
-struct NcsInfo { bool exists = false; std::vector<JCall> calls; std::vector<std::string> strings; };
+struct NcsInfo {
+    bool exists = false;
+    std::vector<JCall> calls;
+    std::vector<std::string> strings;
+    std::vector<std::pair<uint16_t, std::string>> creates;    // CreateObject / CreateItemOnObject: (routine, blueprint)
+};
 std::map<std::string, NcsInfo> g_ncs;
 int g_loads = 0;                                           // scripts / conversations read from the game's resources (scan slicing)
-const uint16_t RT_AddJournalQuestEntry = 367;              // nwscript.nss routine number
+const uint16_t RT_AddJournalQuestEntry = 367;              // nwscript.nss routine numbers
+const uint16_t RT_CreateObject = 243, RT_CreateItemOnObject = 31;
 const NcsInfo& Script(const std::string& resref) {
     auto it = g_ncs.find(resref);
     if (it != g_ncs.end()) return it->second;
@@ -149,6 +156,14 @@ const NcsInfo& Script(const std::string& resref) {
         size_t last = 0;
         for (size_t k = 0; k < ops.size(); k++) {
             if (ops[k].k == 'S') info.strings.push_back(Lower(ops[k].s));
+            if (ops[k].k == 'A' && (ops[k].v == RT_CreateObject || ops[k].v == RT_CreateItemOnObject)) {
+                // the blueprint is the last string pushed (the template argument)
+                for (size_t q = k, n = 0; q > 0 && n < 8; n++) {
+                    q--;
+                    if (ops[q].k == 'A') break;
+                    if (ops[q].k == 'S') { if (!ops[q].s.empty()) info.creates.push_back({(uint16_t)ops[k].v, Lower(ops[q].s)}); break; }
+                }
+            }
             if (ops[k].k != 'A' || ops[k].v != RT_AddJournalQuestEntry) continue;
             JCall c;
             // arguments are pushed last to first: the quest tag is the last string, the entry the int before it
@@ -379,11 +394,27 @@ const std::vector<std::string>& ObjScripts(void* o, int type) {
         for (char c : name) if ((unsigned char)c <= 32 || (unsigned char)c > 126) ok = false;
         if (!ok) continue;
         name = Lower(name);
-        if (!Script(name).calls.empty() && std::find(r.begin(), r.end(), name) == r.end()) r.push_back(name);
+        const NcsInfo& ni = Script(name);
+        if ((!ni.calls.empty() || !ni.creates.empty()) && std::find(r.begin(), r.end(), name) == r.end()) r.push_back(name);
     }
     auto& slot = cache[o];
     slot = {id, std::move(r)};
     return slot.second;
+}
+// a creature's name as the game shows it (CNWSCreatureStats::GetFullName)
+std::string SrvName(uint32_t id) {
+    static auto fFull = (void* (*)(void*, void*))GetProcAddress(GetModuleHandleA(nullptr), "?GetFullName@CNWSCreatureStats@@QEAA?AVCExoString@@XZ");
+    static auto fFree = (void (*)(void*))GetProcAddress(GetModuleHandleA(nullptr), "??1CExoString@@QEAA@XZ");
+    void* o = SrvObject(id);
+    if (!o || F<uint8_t>(o, 0xc) != 5 || !fFull) return std::string();
+    void* st = F<void*>(o, 0xad0);
+    if (!st) return std::string();
+    struct { char* p; uint32_t len, cap; } s{};
+    fFull(st, &s);
+    std::string r = s.p ? G2UClean(s.p, (int)s.len) : std::string();
+    if (fFree) fFree(&s);
+    while (!r.empty() && r.back() == ' ') r.pop_back();
+    return r;
 }
 std::string SrvTag(void* g) {
     const char* p = F<const char*>(g, 0x20); uint32_t n = F<uint32_t>(g, 0x28);
@@ -405,6 +436,7 @@ struct Job {
     std::map<std::string, std::vector<std::string>> questsOf;            // tag -> quests waiting for it
     std::vector<Edge> edges;
     std::vector<Offer> offers;
+    std::vector<std::pair<Target, std::string>> spawners;   // an object whose script creates something with this tag
     // a conversation's part in this round, worked out once however many people use it
     struct DlgRound { std::vector<std::string> moves, offers; bool maybe = true; };
     std::map<const DlgInfo*, DlgRound> dlg;
@@ -418,13 +450,61 @@ bool Mine(uint32_t id) {                                   // the hero or one of
     return c && (GD::MasterId(c) & 0x7fffffffu) == J.me;
 }
 int (*fDead)(void*) = nullptr;
+// a blueprint something is created from: its tag, conversation and scripts
+struct Blueprint { bool ok = false; std::string tag; const DlgInfo* dlg = nullptr; std::vector<std::string> scripts; };
+std::map<std::string, Blueprint> g_bp;
+const Blueprint& GetBlueprint(uint16_t routine, const std::string& resref) {
+    std::string key = (routine == RT_CreateItemOnObject ? "i:" : "o:") + resref;
+    auto it = g_bp.find(key);
+    if (it != g_bp.end()) return it->second;
+    Blueprint b;
+    // CreateObject: a creature, placeable, store ... (the type is a variable in many scripts: try the kinds that talk)
+    const uint16_t types[] = {2027, 2044};                     // utc, utp
+    std::vector<uint16_t> try_;
+    if (routine == RT_CreateItemOnObject) try_.push_back(2025); else try_.assign(types, types + 2);
+    for (uint16_t ty : try_) {
+        std::vector<uint8_t> v; Gff g;
+        if (!Res_Load(resref.c_str(), ty, v) || !g.Load(std::move(v))) continue;
+        g_loads++;
+        b.ok = true;
+        for (auto& f : g.Fields(0)) {
+            if (f.label == "Tag" && f.type == 10) b.tag = Lower(g.Str(f));
+            else if (f.label == "Conversation" && f.type == 11) { std::string c = Lower(g.Ref(f)); if (!c.empty()) { const DlgInfo& d = Dialog(c); if (!d.byQuest.empty()) b.dlg = &d; } }
+            else if (f.type == 11 && (f.label.compare(0, 6, "Script") == 0 || f.label.compare(0, 2, "On") == 0)) {
+                std::string sc = Lower(g.Ref(f));
+                if (!sc.empty() && !Script(sc).calls.empty()) b.scripts.push_back(sc);
+            }
+        }
+        break;
+    }
+    return g_bp.emplace(key, std::move(b)).first->second;
+}
+
 void AddCalls(const std::vector<std::string>& scripts, const Target* self) {
-    for (auto& sc : scripts)
-        for (auto& c : Script(sc).calls) {
+    for (auto& sc : scripts) {
+        const NcsInfo& ni = Script(sc);
+        for (auto& c : ni.calls) {
             if (!Later(c.quest, c.entry)) continue;
             J.goal[c.quest].insert(c.tags.begin(), c.tags.end());
             if (self) J.objectives[c.quest].push_back(*self);
         }
+        // what it creates: someone whose conversation (or scripts) moves a quest on, or a thing with a tag a
+        // quest waits for (matched once the tags are known) - the object that creates it is the way there
+        if (!self || self->isArea) continue;
+        for (auto& cr : ni.creates) {
+            const Blueprint& bp = GetBlueprint(cr.first, cr.second);
+            if (!bp.ok) continue;
+            if (!bp.tag.empty()) J.spawners.push_back({*self, bp.tag});
+            if (bp.dlg)
+                for (auto& q : bp.dlg->byQuest) {
+                    auto cur = J.state.find(q.first);
+                    if (cur != J.state.end() && q.second.upper_bound(cur->second) != q.second.end()) J.objectives[q.first].push_back(*self);
+                }
+            for (auto& bsc : bp.scripts)
+                for (auto& c : Script(bsc).calls)
+                    if (Later(c.quest, c.entry)) J.objectives[c.quest].push_back(*self);
+        }
+    }
 }
 
 // phase 0: the journal, the module's own scripts
@@ -432,7 +512,7 @@ bool Begin(void* srv, void* sp, void* mod) {
     J = Job();
     J.running = true;
     J.mod = mod;
-    if (mod != g_jrlModule) { g_jrlModule = mod; g_dlg.clear(); g_ncs.clear(); g_objScripts.clear(); LoadJournalDefs(); }
+    if (mod != g_jrlModule) { g_jrlModule = mod; g_dlg.clear(); g_ncs.clear(); g_objScripts.clear(); g_bp.clear(); LoadJournalDefs(); }
     J.act = ActiveQuests(sp);
     for (auto& a : J.act) J.state[a.tag] = a.state;
     J.me = Id(Player()) & 0x7fffffffu;
@@ -584,7 +664,20 @@ void Finish(void* srv, void* sp) {
         std::vector<Target> tv;
         for (auto& t : J.objectives[a.tag]) if (!(t.isArea && t.area == myArea)) tv.push_back(t);
         m.objective = pick(tv);
-        if (!m.objective) { tv = J.givers[a.tag]; pick(tv); }
+        if (!m.objective) {
+            // whose conversation moves it on - leaving out those you talked to when it moved on before (a druid
+            // already rescued still has the line, behind a condition), unless nobody else is left
+            tv.clear();
+            std::set<uint32_t> done = TalkLog_MovedBy(Quest_Title(a.tag));
+            std::set<std::string> doneNames = TalkLog_MovedByName(Quest_Title(a.tag));   // older logs: by name
+            for (auto& t : J.givers[a.tag]) {
+                if (done.count(t.id & 0x7fffffffu)) continue;
+                if (!doneNames.empty() && doneNames.count(Lower(SrvName(t.id)))) continue;
+                tv.push_back(t);
+            }
+            if (tv.empty()) tv = J.givers[a.tag];
+            pick(tv);
+        }
         if (g_debugTargets) {
             std::string d;
             for (auto& t : tv) {
@@ -659,6 +752,10 @@ void Step(double budgetMs) {
             for (auto& q : J.questsOf) {
                 auto bt = J.byTag.find(q.first);
                 if (bt != J.byTag.end()) for (auto& qq : q.second) J.objectives[qq].insert(J.objectives[qq].end(), bt->second.begin(), bt->second.end());
+            }
+            for (auto& sp : J.spawners) {
+                auto q = J.questsOf.find(sp.second);
+                if (q != J.questsOf.end()) for (auto& qq : q->second) J.objectives[qq].push_back(sp.first);
             }
             J.phase = J.questsOf.empty() ? 4 : 3;
         } else if (J.phase == 3) {                            // items

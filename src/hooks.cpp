@@ -1,5 +1,6 @@
 #include "hooks.h"
 #include "prof.h"
+#include "netfix.h"
 #include "game.h"
 #include "log.h"
 #include "control.h"
@@ -82,6 +83,7 @@ bool Hooks_Install() {
     }
     MH_STATUS mh = MH_Initialize();
     if (mh != MH_OK && mh != MH_ERROR_ALREADY_INITIALIZED) { Log("MH_Initialize failed"); return false; }
+    NetFix_Install();
     o_ProcessInput = (decltype(o_ProcessInput))Hook_Create(G::VA::ProcessInput, (void*)hk_ProcessInput, "ProcessInput");
     o_UpdateDriveMode = (decltype(o_UpdateDriveMode))Hook_Create(G::VA::UpdateDriveMode, (void*)hk_UpdateDriveMode, "UpdateDriveMode");
     o_FHC_Hostile = (decltype(o_FHC_Hostile))Hook_Create(G::VA::FeedbackHitCheckHostile, (void*)hk_FHC_Hostile, "FeedbackHitCheckHostile");

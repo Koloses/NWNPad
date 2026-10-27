@@ -61,7 +61,7 @@ void hk_ShowDialogEntry(void* gig, void* text, uint32_t p3, uint32_t speaker) {
     DS.textTime = g_pad.now;
     DS.active = true;
     Log("dialog entry from %08x '%s'", speaker, DS.name.c_str());
-    TalkLog_Npc(DS.name, DS.text);
+    TalkLog_Npc(DS.speaker, DS.name, DS.text);
     o_ShowDialogEntry(gig, text, p3, speaker);
     HidePanel();
 }

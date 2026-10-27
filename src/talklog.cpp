@@ -89,7 +89,7 @@ bool Write(const std::string& path) {
     fprintf(f, "NWNPadTalk\t1\n");
     fprintf(f, "O\t%s\n", Esc(g_owner).c_str());
     for (auto& t : g_talks) {
-        fprintf(f, "T\t%s\t%s\n", Esc(t.npc).c_str(), Esc(t.area).c_str());
+        fprintf(f, "T\t%s\t%s\t%08x\n", Esc(t.npc).c_str(), Esc(t.area).c_str(), t.npcId);
         for (auto& q : t.quests) fprintf(f, "Q\t%s\n", Esc(q).c_str());
         for (auto& l : t.lines) fprintf(f, "%s\t%s\t%s\n", l.player ? "P" : "N", Esc(l.who).c_str(), Esc(l.text).c_str());
     }
@@ -108,7 +108,7 @@ void Read(const std::string& path) {
         if (line.empty()) return;
         auto v = Split(line);
         if (v[0] == "O" && v.size() >= 2) g_owner = v[1];
-        else if (v[0] == "T" && v.size() >= 3) { Talk t; t.seq = ++g_seq; t.npc = v[1]; t.area = v[2]; g_talks.push_back(t); }
+        else if (v[0] == "T" && v.size() >= 3) { Talk t; t.seq = ++g_seq; t.npc = v[1]; t.area = v[2]; if (v.size() >= 4) t.npcId = (uint32_t)strtoul(v[3].c_str(), nullptr, 16) & 0x7fffffffu; g_talks.push_back(t); }
         else if (!g_talks.empty() && v[0] == "Q" && v.size() >= 2) g_talks.back().quests.push_back(v[1]);
         else if (!g_talks.empty() && (v[0] == "N" || v[0] == "P") && v.size() >= 3) { TalkLine l; l.player = v[0] == "P"; l.who = v[1]; l.text = v[2]; g_talks.back().lines.push_back(l); }
     };
@@ -121,7 +121,8 @@ void Read(const std::string& path) {
 void Close() {
     if (!g_open) return;
     g_open = false; g_closedAt = Now();
-    if (!g_talks.empty() && g_talks.back().lines.empty()) g_talks.pop_back(); g_ver++;
+    if (!g_talks.empty() && g_talks.back().lines.empty()) g_talks.pop_back();
+    g_ver++;
     g_dirty = true;
 }
 
@@ -173,11 +174,11 @@ void TalkLog_GameLoaded(uint32_t number, const std::string& name) {
     g_onlineFile.clear();
 }
 
-void TalkLog_Npc(const std::string& who, const std::string& text) {
+void TalkLog_Npc(uint32_t id, const std::string& who, const std::string& text) {
     std::lock_guard<std::recursive_mutex> lk(g_mx);
     if (text.empty()) return;
     if (!g_open) {
-        Talk t; t.seq = ++g_seq; t.npc = who; t.area = AreaName();
+        Talk t; t.seq = ++g_seq; t.npc = who; t.npcId = id & 0x7fffffffu; t.area = AreaName();
         g_talks.push_back(t);
         if (g_talks.size() > MaxTalks) g_talks.erase(g_talks.begin());
         g_open = true;
@@ -253,3 +254,21 @@ std::vector<Talk> TalkLog_ForQuest(const std::string& title) {
 }
 
 uint32_t TalkLog_Version() { return g_ver; }
+
+std::set<uint32_t> TalkLog_MovedBy(const std::string& title) {
+    std::lock_guard<std::recursive_mutex> lk(g_mx);
+    std::set<uint32_t> r;
+    std::string n = Norm(title);
+    for (auto& t : g_talks)
+        if (t.npcId) for (auto& q : t.quests) if (Norm(q) == n) { r.insert(t.npcId); break; }
+    return r;
+}
+
+std::set<std::string> TalkLog_MovedByName(const std::string& title) {
+    std::lock_guard<std::recursive_mutex> lk(g_mx);
+    std::set<std::string> r;
+    std::string n = Norm(title);
+    for (auto& t : g_talks)
+        if (!t.npcId) for (auto& q : t.quests) if (Norm(q) == n) { r.insert(Norm(t.npc)); break; }
+    return r;
+}

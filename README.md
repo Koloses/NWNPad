@@ -96,12 +96,19 @@ the mod reads the module's scripts for what writes the quest's next journal entr
 first: the creature to kill, the item to get (where it lies, or whoever carries it - the troll chieftain
 with the troll's head), the place to reach; with several (e.g. werewolves) the nearest one. Once it's
 done (the item is in your pack, the creature dead) the marker points at whoever's conversation takes
-the quest on, as it does when a module's scripts don't reveal the objective.
+the quest on, as it does when a module's scripts don't reveal the objective. Something that creates the
+objective counts too (the cocoon a captured druid steps out of), and people whose conversation already
+moved the quest on (a druid you rescued) are left out while someone else can still move it.
 A gold "!" above someone (and on the minimap and the map) means their conversation can start a quest
 you don't have yet; the target frame names the quest. A grey "!" means its conversation first checks
 another quest you haven't got, so it may not be offered yet. Conversations can have other conditions
 too (your class, an item, an earlier event), so now and then someone won't offer it after all.
 `QuestMarker=0` in `[Interface]` turns it off.
+
+**Freezes of about 12 s:** the game looks up its master server on its main thread every minute, even in
+single player; when your DNS doesn't answer, the game stands still until Windows gives up (nwengineLog:
+"Resolving masterserver DNS took longer than 3 seconds"). NWNPad does those lookups in the background
+instead; the game is told to try again later until one succeeds.
 
 **Frame rate:** `ShowFPS=1` in `[Interface]` shows frames per second, the average and worst frame
 time of the last second and the OpenGL renderer (e.g. zink on your GPU) in the top-left corner. Frames
