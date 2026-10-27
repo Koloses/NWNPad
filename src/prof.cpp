@@ -21,6 +21,14 @@ double Prof_Now() {
 void Prof_Add(ProfSec s, double ms) { g_frame[s] += ms; }
 
 void Prof_Frame() {
+    // a long gap between two frames: the game stood still (what our code took that frame is below)
+    static double lastSwap = 0;
+    double nowSwap = Prof_Now();
+    if (lastSwap > 0 && nowSwap - lastSwap > 400.0) {
+        static int freezes = 0;
+        if (freezes++ < 200) Log("prof: FREEZE %.0f ms between frames (NWNPad in it: ui %.1f pre-input %.1f post-input %.1f ms)", nowSwap - lastSwap, g_frame[PS_UI], g_frame[PS_PREINPUT], g_frame[PS_POSTINPUT]);
+    }
+    lastSwap = nowSwap;
     double total = 0;
     for (int i = 0; i < PS_HUD; i++) total += g_frame[i];          // the parts are inside "ui"
     if (total > 8.0 && g_spikes < 200) {                 // a frame where our code took long
