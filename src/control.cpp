@@ -13,6 +13,7 @@
 #include "log.h"
 #include "hub.h"
 #include "gamedata.h"
+#include "questmark.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -20,6 +21,7 @@
 #include <windows.h>
 #include <cmath>
 #include <vector>
+#include <set>
 #include <algorithm>
 
 ControlState g_ctl;
@@ -658,6 +660,41 @@ static void DevCommands(void* player) {
         for (auto& f : GD::EffectList(player)) Log("dev: fx icon %d '%s' equipment %d left %.1f", f.icon, GD::EffectIconName(f.icon).c_str(), f.equipment, f.left);
         return;
     }
+    if (strncmp(line, "exostrs", 7) == 0) {   // CExoStrings inside server objects of the player's area (reverse engineering)
+        HMODULE exe = GetModuleHandleA(nullptr);
+        static void** am = (void**)GetProcAddress(exe, "?g_pAppManager@@3PEAVCAppManager@@EA");
+        auto fGO = (void* (*)(void*, uint32_t))GetProcAddress(exe, "?GetGameObject@CServerExoApp@@QEAAPEAVCGameObject@@I@Z");
+        void* srv = am && *am ? F<void*>(*am, 8) : nullptr;
+        auto dump = [&](void* o, const char* what, size_t size) {
+            Log("dev: exostrs %s %p", what, o);
+            for (size_t off = 0; off + 12 <= size; off += 8) {
+                char* p = F<char*>(o, off); uint32_t n = F<uint32_t>(o, off + 8);
+                if (!p || n == 0 || n > 64 || !Readable(p, n)) continue;
+                bool ok = true; for (uint32_t i = 0; i < n; i++) if ((unsigned char)p[i] < 32 || (unsigned char)p[i] > 126) ok = false;
+                if (ok && (n == strnlen(p, 65))) Log("dev:   +%#x '%.*s'", (int)off, (int)n, p);
+            }
+        };
+        void* sp = srv ? ((void* (*)(void*, uint32_t))GetProcAddress(exe, "?GetCreatureByGameObjectID@CServerExoApp@@QEAAPEAVCNWSCreature@@I@Z"))(srv, Id(player) & 0x7fffffff) : nullptr;
+        void* ar = sp ? ((void* (*)(void*, uint32_t))A(0x1405595a0))(srv, F<uint32_t>(sp, 0xa0)) : nullptr;
+        void* mod = srv ? ((void* (*)(void*))A(0x1405599a0))(srv) : nullptr;
+        if (mod) dump(mod, "module", 0x800);
+        if (ar) dump(ar, "area", 0x800);
+        uint32_t* ids = ar ? F<uint32_t*>(ar, 0x228) : nullptr; int n = ar ? F<int>(ar, 0x230) : 0;
+        std::set<int> done;
+        for (int i = 0; ids && i < n; i++) {
+            void* g = fGO(srv, ids[i]); if (!g) continue;
+            void* o = VCall<void* (*)(void*)>(g, 0x20)(g); if (!o) continue;
+            int t = F<uint8_t>(o, 0xc);
+            if (done.count(t) && t != 5) continue;
+            if (t == 5 && done.count(5) >= 1 && (ids[i] & 0x7fffffff) == (Id(player) & 0x7fffffff)) continue;
+            done.insert(t);
+            char w[32]; snprintf(w, sizeof w, "type %d id %08x", t, ids[i]);
+            dump(o, w, t == 5 ? 0x1800 : 0xc00);
+            if (t == 5 && done.size() > 8) break;
+        }
+        return;
+    }
+    if (strncmp(line, "qfollow ", 8) == 0) { Quest_Track(line + 8); return; }   // follow a quest by tag (tests)
     if (strncmp(line, "nss ", 4) == 0) {       // nss <script code>: run NWScript on the server (single player tests)
         HMODULE exe = GetModuleHandleA(nullptr);
         void** vm = (void**)GetProcAddress(exe, "?g_pVirtualMachine@@3PEAVCVirtualMachine@@EA");
