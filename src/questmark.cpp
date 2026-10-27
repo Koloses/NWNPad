@@ -175,7 +175,8 @@ const NcsInfo& Script(const std::string& resref) {
             for (size_t z = 0; z < k; z++)                      // the tests of the blocks around the call
                 if (ops[z].k == 'Z' && ops[z].pos < ops[k].pos && ops[k].pos < ops[z].v)
                     for (size_t x = z >= 8 ? z - 8 : 0; x < z; x++) if (ops[x].k == 'S') t.insert(Lower(ops[x].s));
-            for (auto& w : t) if (w != c.quest && w.compare(0, 16, "nw_journal_entry") != 0) c.tags.push_back(w);
+            // (the quest's own tag stays: an item can be tagged like its quest - M2Q3E_BROOCH / m2q3E_Brooch)
+            for (auto& w : t) if (w.compare(0, 16, "nw_journal_entry") != 0) c.tags.push_back(w);
             if (!c.quest.empty()) info.calls.push_back(c);
             last = k + 1;
         }
