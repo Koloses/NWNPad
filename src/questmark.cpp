@@ -171,10 +171,15 @@ const NcsInfo& Script(const std::string& resref) {
             while (q > 0) { q--; if (ops[q].k == 'S') { c.quest = Lower(ops[q].s); break; } }
             if (q > 0 && ops[q - 1].k == 'I' && ops[q - 1].pos + 6 == ops[q].pos) c.entry = ops[q - 1].v;   // a constant entry
             std::set<std::string> t;
-            for (size_t x = last; x < k; x++) if (ops[x].k == 'S') t.insert(Lower(ops[x].s));
-            for (size_t z = 0; z < k; z++)                      // the tests of the blocks around the call
-                if (ops[z].k == 'Z' && ops[z].pos < ops[k].pos && ops[k].pos < ops[z].v)
+            // the tests of the blocks around the call, and the strings of the innermost block before it (in a
+            // long script of many item checks, earlier unrelated blocks are not the call's business)
+            size_t inner = last;
+            for (size_t z = 0; z < k; z++)
+                if (ops[z].k == 'Z' && ops[z].pos < ops[k].pos && ops[k].pos < ops[z].v) {
                     for (size_t x = z >= 8 ? z - 8 : 0; x < z; x++) if (ops[x].k == 'S') t.insert(Lower(ops[x].s));
+                    if (z + 1 > inner) inner = z + 1;
+                }
+            for (size_t x = inner; x < k; x++) if (ops[x].k == 'S') t.insert(Lower(ops[x].s));
             // (the quest's own tag stays: an item can be tagged like its quest - M2Q3E_BROOCH / m2q3E_Brooch)
             for (auto& w : t) if (w.compare(0, 16, "nw_journal_entry") != 0) c.tags.push_back(w);
             if (!c.quest.empty()) info.calls.push_back(c);
@@ -438,6 +443,8 @@ struct Job {
     std::vector<Edge> edges;
     std::vector<Offer> offers;
     std::vector<std::pair<Target, std::string>> spawners;   // an object whose script creates something with this tag
+    std::vector<std::pair<Target, std::pair<uint16_t, std::string>>> created;   // (object, what its scripts create)
+    size_t ci = 0;
     // a conversation's part in this round, worked out once however many people use it
     struct DlgRound { std::vector<std::string> moves, offers; bool maybe = true; };
     std::map<const DlgInfo*, DlgRound> dlg;
@@ -492,20 +499,22 @@ void AddCalls(const std::vector<std::string>& scripts, const Target* self) {
         // what it creates: someone whose conversation (or scripts) moves a quest on, or a thing with a tag a
         // quest waits for (matched once the tags are known) - the object that creates it is the way there
         if (!self || self->isArea) continue;
-        for (auto& cr : ni.creates) {
-            const Blueprint& bp = GetBlueprint(cr.first, cr.second);
-            if (!bp.ok) continue;
-            if (!bp.tag.empty()) J.spawners.push_back({*self, bp.tag});
-            if (bp.dlg)
-                for (auto& q : bp.dlg->byQuest) {
-                    auto cur = J.state.find(q.first);
-                    if (cur != J.state.end() && q.second.upper_bound(cur->second) != q.second.end()) J.objectives[q.first].push_back(*self);
-                }
-            for (auto& bsc : bp.scripts)
-                for (auto& c : Script(bsc).calls)
-                    if (Later(c.quest, c.entry)) J.objectives[c.quest].push_back(*self);
-        }
+        // (blueprints not read yet are read in their own phase, one per frame)
+        for (auto& cr : ni.creates) J.created.push_back({*self, cr});
     }
+}
+void Created(const Target& self, const std::pair<uint16_t, std::string>& cr) {
+    const Blueprint& bp = GetBlueprint(cr.first, cr.second);
+    if (!bp.ok) return;
+    if (!bp.tag.empty()) J.spawners.push_back({self, bp.tag});
+    if (bp.dlg)
+        for (auto& q : bp.dlg->byQuest) {
+            auto cur = J.state.find(q.first);
+            if (cur != J.state.end() && q.second.upper_bound(cur->second) != q.second.end()) J.objectives[q.first].push_back(self);
+        }
+    for (auto& bsc : bp.scripts)
+        for (auto& c : Script(bsc).calls)
+            if (Later(c.quest, c.entry)) J.objectives[c.quest].push_back(self);
 }
 
 // phase 0: the journal, the module's own scripts
@@ -736,7 +745,7 @@ void Step(double budgetMs) {
         if (J.phase == 1) {                                   // every object of every area
             uint32_t* areas = F<uint32_t*>(mod, 0x50);
             int na = F<int>(mod, 0x58);
-            if (!areas || J.ai >= na || J.ai >= 1000) { J.phase = 2; continue; }
+            if (!areas || J.ai >= na || J.ai >= 1000) { J.phase = 5; continue; }
             void* ar = SrvArea(areas[J.ai]);
             if (!ar) { J.ai++; J.i = 0; continue; }
             if (J.i == 0) { Target at{areas[J.ai], areas[J.ai], Vec3{}, true}; AddCalls(ObjScripts(ar, 4), &at); }
@@ -748,6 +757,12 @@ void Step(double budgetMs) {
                 if (elapsed() >= budgetMs) return;
             }
             J.ai++; J.i = 0;
+        } else if (J.phase == 5) {                            // what scripts create
+            if (J.ci >= J.created.size()) { J.phase = 2; continue; }
+            if (g_loads > 0) return;
+            Created(J.created[J.ci].first, J.created[J.ci].second);
+            J.ci++;
+            if (elapsed() >= budgetMs) return;
         } else if (J.phase == 2) {                            // tags -> objects
             for (auto& g : J.goal) for (auto& tg : g.second) J.questsOf[tg].push_back(g.first);
             for (auto& q : J.questsOf) {
