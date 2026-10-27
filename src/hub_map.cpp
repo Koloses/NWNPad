@@ -201,6 +201,16 @@ void Draw(float x, float y, float w, float h, float a) {
             label(ex, ey, e.text, sel ? Col(255, 244, 222) : Theme::Text, sel, px(sel ? 17 : 15));
         }
     }
+    // people with a quest for you
+    if (g_cfg.questMarker)
+        for (auto& of : Quest_Offers()) {
+            float ex = ox + of.pos.x * sc, ey = oy - of.pos.y * sc;
+            UIK::QuestBang(ex, ey, px(20), of.maybe, a);
+            if (!of.titles.empty()) {
+                std::string t = of.titles[0] + (of.titles.size() > 1 ? " ..." : "");
+                label(ex, ey - px(4), t, of.maybe ? Theme::TextDim : Col(255, 214, 120), false, px(14));
+            }
+        }
     // party
     for (void* m : GD::PartyMembers(pl)) {
         Vec3 q = Pos(m);
@@ -349,13 +359,23 @@ void Map_DrawMinimap(float x, float y, float size, float a) {
         Circle(px0, py0, px(5), Col(30, 20, 10, (int)(230 * a)));
         Circle(px0, py0, px(3.5f), Theme::Gold.alpha(a));
     }
-    // creatures nearby: hostiles red, party green
+    // creatures nearby: hostiles red, party green; people with a quest for you get a "!"
+    std::vector<QuestOffer> offers;
+    if (g_cfg.questMarker) offers = Quest_Offers();
+    for (auto& of : offers) {
+        if (fabsf(of.pos.x - pp.x) > R2 || fabsf(of.pos.y - pp.y) > R2) continue;
+        float cx, cy; W2S(of.pos.x, of.pos.y, cx, cy);
+        UIK::QuestBang(cx, cy, px(15), of.maybe, a);
+    }
     int n = F<int>(ar, OFS::Area_ObjCount);
     uint32_t* ids = F<uint32_t*>(ar, OFS::Area_ObjIds);
     uint32_t pid = Id(pl);
     for (int i = 0; ids && i < n && i < 5000; i++) {
         void* o = GetObj(ids[i]);
         if (!o || Type(o) != OT_CREATURE || Id(o) == pid || GD::IsDead(o)) continue;
+        bool offering = false;
+        for (auto& of : offers) if (of.object == Id(o)) offering = true;
+        if (offering) continue;
         Vec3 q = Pos(o);
         if (fabsf(q.x - pp.x) > R2 || fabsf(q.y - pp.y) > R2) continue;
         bool party = GD::MasterId(o) == pid;

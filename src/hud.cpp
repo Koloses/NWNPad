@@ -16,6 +16,7 @@
 #include <windows.h>
 #include <deque>
 #include <string>
+#include "questmark.h"
 #include <cmath>
 #include <cstring>
 
@@ -248,6 +249,22 @@ static void DrawHero(void* pl) {
     }
 }
 
+// a "!" above people whose conversation can start a quest you don't have (dim: maybe not yet)
+static void DrawOffers(void* pl) {
+    if (!g_cfg.questMarker || g_ctl.radialOpen) return;
+    Vec3 me = Pos(pl);
+    for (auto& of : Quest_Offers()) {
+        float dx = of.pos.x - me.x, dy = of.pos.y - me.y;
+        if (dx * dx + dy * dy > 35.0f * 35.0f) continue;
+        if (of.object == g_ctl.softTarget) continue;        // the target marker is there
+        Vec3 p = of.pos; p.z += 2.5f;
+        float sx, sy;
+        if (!WorldToScreen(p, sx, sy) || sx < 0 || sx > 1 || sy < 0 || sy > 1) continue;
+        float bob = sinf((float)g_pad.now * 2.5f + of.pos.x) * px(3);
+        UIK::QuestBang(sx * W(), sy * H() - px(14) + bob, px(30), of.maybe, 0.95f);
+    }
+}
+
 static void DrawTarget(void* pl) {
     void* t = g_ctl.softTarget ? GetObj(g_ctl.softTarget) : nullptr;
     if (!t) return;
@@ -287,6 +304,17 @@ static void DrawTarget(void* pl) {
             UIK::Bar(x + px(24), by, bw, px(10), hp.frac, rc.r > 200 && rc.g < 120 ? Theme::HP : Theme::Friendly, Theme::HPBack);
         }
     }
+    // a quest this person can give you
+    if (g_cfg.questMarker)
+        for (auto& of : Quest_Offers())
+            if (of.object == Id(t) && !of.titles.empty()) {
+                std::string q = (of.maybe ? "Quest (maybe later): " : "Quest: ") + of.titles[0] + (of.titles.size() > 1 ? " ..." : "");
+                float qw = TextWidth(FONT_BODY_BOLD, px(17), q.c_str()) + px(48);
+                if (qw > w) qw = w;
+                RoundRect(x + (w - qw) * 0.5f, y + h + px(6), qw, px(30), px(10), Col(20, 14, 6, 200));
+                UIK::QuestBang(x + (w - qw) * 0.5f + px(16), y + h + px(21), px(18), of.maybe);
+                TextFit(FONT_BODY_BOLD, px(17), x + (w - qw) * 0.5f + px(28), y + h + px(9), qw - px(36), q.c_str(), of.maybe ? Theme::TextDim : Col(255, 214, 120));
+            }
     // action prompt
     const char* verb = g_ctl.inActionTargetMode ? "Use on target" : ActionVerb(t);
     float hw = UIK::HintWidth(GL_A, verb, px(26)) + px(30) + UIK::HintWidth(GL_A, "Hold: Actions", px(22));
@@ -387,6 +415,7 @@ void HUD_Draw() {
     void* pl = Player();
     if (!pl) return;
     DrawHero(pl);
+    DrawOffers(pl);
     DrawTarget(pl);
     DrawActions();
     DrawFeed();

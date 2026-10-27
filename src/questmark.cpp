@@ -172,8 +172,10 @@ struct DlgInfo { std::vector<DlgSet> sets; };
 std::map<std::string, DlgInfo> g_dlg;
 std::map<std::string, std::set<uint32_t>> g_end;       // quest tag -> entries that end it
 std::map<std::string, std::string> g_title;            // quest tag -> title
+std::map<std::string, uint32_t> g_first;               // quest tag -> its first entry (the lowest)
 bool g_jrlLoaded = false;
 void* g_jrlModule = nullptr;
+std::vector<uint32_t> g_fakeOffers;
 bool g_debugTargets = false;           // log the targets of every quest on the next scan
 
 const DlgInfo& Dialog(const std::string& resref) {
@@ -226,14 +228,14 @@ const DlgInfo& Dialog(const std::string& resref) {
 }
 
 void LoadJournalDefs() {
-    g_end.clear(); g_title.clear();
+    g_end.clear(); g_title.clear(); g_first.clear();
     std::vector<uint8_t> v;
     Gff g;
     if (!Res_Load("module", 2056, v) || !g.Load(std::move(v))) { Log("quest: no module.jrl"); return; }
     for (auto& top : g.Fields(0)) {
         if (top.label != "Categories" || top.type != 15) continue;
         for (uint32_t c : g.List(top)) {
-            std::string tag, title; std::set<uint32_t> ends;
+            std::string tag, title; std::set<uint32_t> ends; uint32_t first = 0xffffffffu;
             for (auto& f : g.Fields(c)) {
                 if (f.label == "Tag" && f.type == 10) tag = Lower(g.Str(f));
                 if (f.label == "Name" && f.type == 12) title = g.Loc(f);
@@ -245,9 +247,10 @@ void LoadJournalDefs() {
                             if (ef.label == "End") end = (ef.data & 0xffff) != 0;
                         }
                         if (end) ends.insert(id);
+                        if (id < first) first = id;
                     }
             }
-            if (!tag.empty()) { g_end[tag] = ends; g_title[tag] = title; }
+            if (!tag.empty()) { g_end[tag] = ends; g_title[tag] = title; if (first != 0xffffffffu) g_first[tag] = first; }
         }
     }
     Log("quest: module.jrl has %d quests", (int)g_end.size());
@@ -284,9 +287,12 @@ struct Mark {
     uint64_t when = 0;           // journal entry time (latest = followed by default)
     bool objective = false;      // the quest's objective, not the one who gives / takes it
 };
+struct Offer { uint32_t id, area; Vec3 pos; bool maybe; std::vector<std::string> quests; };
 struct State {
     std::string tag;             // followed quest (lower case)
     std::vector<Mark> marks;     // every active quest
+    std::vector<Offer> offers;   // who can start a quest you don't have (every area)
+    uint32_t area = 0;           // the player's (server) area
     double lastScan = -100;
 } S;
 std::string g_trackTag;          // chosen on the journal / map page ("" = the latest updated quest)
@@ -294,8 +300,10 @@ bool g_trackNone = false;        // unfollowed: no marker until a quest moves on
 uint64_t g_noneWhen = 0;         // newest journal entry when it was unfollowed
 
 struct Active { std::string tag; uint32_t state; uint64_t when; };
+std::set<std::string> g_known;    // every quest in the journal, finished ones too
 std::vector<Active> ActiveQuests(void* srvPlayer) {
     std::vector<Active> r;
+    g_known.clear();
     void* j = ((Thiscall0_t)A(VA_GetJournal))(srvPlayer);
     if (!j) return r;
     char* base = F<char*>(j, 0);
@@ -308,6 +316,7 @@ std::vector<Active> ActiveQuests(void* srvPlayer) {
         if (!t || len == 0 || len > 64) continue;
         Active a; a.tag = Lower(std::string(t, len)); a.state = F<uint32_t>(e, 0x38);
         a.when = ((uint64_t)F<uint32_t>(e, 0x20) << 32) | F<uint32_t>(e, 0x24);
+        g_known.insert(a.tag);
         auto end = g_end.find(a.tag);
         if (end != g_end.end() && end->second.count(a.state)) continue;      // finished
         r.push_back(a);
@@ -367,6 +376,7 @@ std::string SrvTag(void* g) {
 
 void Scan() {
     S.marks.clear();
+    S.offers.clear();
     void* pl = Player();
     void* srv = Srv();
     if (!pl || !srv || !fSrvCreature) return;
@@ -376,7 +386,11 @@ void Scan() {
     if (!mod) return;
     if (mod != g_jrlModule) { g_jrlModule = mod; g_dlg.clear(); g_ncs.clear(); LoadJournalDefs(); }
     auto act = ActiveQuests(sp);
-    if (act.empty()) { S.tag.clear(); return; }
+    S.area = SrvAreaId(sp);
+    for (uint32_t f : g_fakeOffers) {                        // tests: dev command qoffer
+        void* o = SrvObject(f);
+        if (o) S.offers.push_back({f | 0x80000000u, SrvAreaId(o), SrvPos(o), false, {act.empty() ? std::string("test") : act[0].tag}});
+    }
     std::map<std::string, uint32_t> state;
     for (auto& a : act) state[a.tag] = a.state;
     auto later = [&](const std::string& q, int64_t entry) { auto it = state.find(q); return it != state.end() && (entry < 0 || entry > (int64_t)it->second); };
@@ -426,6 +440,24 @@ void Scan() {
                 if (t != 7)
                     if (const DlgInfo* d = ObjDialog(o, t)) {
                         std::set<std::string> added;
+                        // a line that starts a quest you don't have: someone to offer it (in this area)
+                        if (t == 5) {
+                            Offer of{ids[i] | 0x80000000u, areas[ai], SrvPos(o), true, {}};
+                            for (auto& st : d->sets) {
+                                // a line that writes the quest's first entry starts it
+                                auto fe = g_first.find(st.quest);
+                                if (g_known.count(st.quest) || fe == g_first.end() || st.entry != fe->second) continue;
+                                auto en = g_end.find(st.quest);                // started and finished at once: nothing to do
+                                if (en != g_end.end() && en->second.count(st.entry)) continue;
+                                // its conditions test another quest you haven't got: maybe not yet
+                                bool maybe = false;
+                                for (auto& w : st.tags)
+                                    if (w.compare(0, 16, "nw_journal_entry") == 0 && w.substr(16) != st.quest && !g_known.count(w.substr(16)) && g_title.count(w.substr(16))) maybe = true;
+                                if (!maybe) of.maybe = false;
+                                if (std::find(of.quests.begin(), of.quests.end(), st.quest) == of.quests.end()) of.quests.push_back(st.quest);
+                            }
+                            if (!of.quests.empty()) S.offers.push_back(of);
+                        }
                         for (auto& st : d->sets) {
                             if (!later(st.quest, st.entry == 0x7fffffff ? -1 : (int64_t)st.entry)) continue;
                             goal[st.quest].insert(st.tags.begin(), st.tags.end());
@@ -552,6 +584,12 @@ void Scan() {
         static std::string last;
         std::string sum;
         for (auto& m : S.marks) { char b[120]; snprintf(b, sizeof b, " %s:%s%s", m.tag.c_str(), m.found ? (m.here ? "here" : "exit") : "-", m.objective ? "*" : ""); sum += b; }
+        sum += " offers:";
+        for (auto& o : S.offers) {
+            void* g = fSrvGameObject(srv, o.id & 0x7fffffffu);
+            char b[160]; snprintf(b, sizeof b, " %s%s(%s)", g ? SrvTag(g).c_str() : "?", o.maybe ? "?" : "", o.quests[0].c_str());
+            if (sum.size() < 3000) sum += b;
+        }
         if (sum != last) { last = sum; g_debugTargets = true; Log("quest: %d active, following '%s';%s", (int)S.marks.size(), S.tag.c_str(), sum.c_str()); }
     }
 }
@@ -628,3 +666,21 @@ std::vector<QuestMark> Quest_All() {
     }
     return r;
 }
+
+std::vector<QuestOffer> Quest_Offers() {
+    Update();
+    std::vector<QuestOffer> r;
+    for (auto& o : S.offers) {
+        if (o.area != S.area) continue;
+        QuestOffer q;
+        q.object = o.id; q.maybe = o.maybe;
+        void* c = GetObj(o.id);
+        if (c && GD::IsDead(c)) continue;
+        q.pos = c ? Pos(c) : o.pos;
+        for (auto& t : o.quests) q.titles.push_back(Quest_Title(t));
+        r.push_back(q);
+    }
+    return r;
+}
+
+void Quest_DevOffer(uint32_t id) { g_fakeOffers.push_back(id & 0x7fffffffu); S.lastScan = -100; }

@@ -18,3 +18,7 @@ struct QuestMark {
     Vec3 point;
 };
 std::vector<QuestMark> Quest_All();                  // every active quest
+// people in this area whose conversation can start a quest you don't have yet (maybe: its conditions
+// test another quest you haven't got, so it may not be offered yet)
+struct QuestOffer { uint32_t object = 0; Vec3 pos; bool maybe = false; std::vector<std::string> titles; };
+std::vector<QuestOffer> Quest_Offers();

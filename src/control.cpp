@@ -694,6 +694,7 @@ static void DevCommands(void* player) {
         }
         return;
     }
+    if (strncmp(line, "qoffer ", 7) == 0) { void Quest_DevOffer(uint32_t); Quest_DevOffer((uint32_t)strtoul(line + 7, nullptr, 16)); return; }   // pretend this one offers a quest (tests)
     if (strncmp(line, "qfollow ", 8) == 0) { Quest_Track(line + 8); return; }   // follow a quest by tag (tests)
     if (strncmp(line, "nss ", 4) == 0) {       // nss <script code>: run NWScript on the server (single player tests)
         HMODULE exe = GetModuleHandleA(nullptr);

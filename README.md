@@ -97,6 +97,10 @@ first: the creature to kill, the item to get (where it lies, or whoever carries 
 with the troll's head), the place to reach; with several (e.g. werewolves) the nearest one. Once it's
 done (the item is in your pack, the creature dead) the marker points at whoever's conversation takes
 the quest on, as it does when a module's scripts don't reveal the objective.
+A gold "!" above someone (and on the minimap and the map) means their conversation can start a quest
+you don't have yet; the target frame names the quest. A grey "!" means its conversation first checks
+another quest you haven't got, so it may not be offered yet. Conversations can have other conditions
+too (your class, an item, an earlier event), so now and then someone won't offer it after all.
 `QuestMarker=0` in `[Interface]` turns it off.
 
 **Frame rate:** `ShowFPS=1` in `[Interface]` shows frames per second, the average and worst frame

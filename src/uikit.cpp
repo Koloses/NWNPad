@@ -156,3 +156,15 @@ void UI_DrawHints(const HintItem* items, int n, float a) {
         x += UIK::Hint(items[i].g, items[i].label, x, y + px(10), size, a) + gap;
     }
 }
+
+void UIK::QuestBang(float x, float y, float h, bool dim, float alpha) {
+    using namespace R;
+    Col c = dim ? Col(170, 160, 140) : Col(255, 196, 40);
+    float w = h * 0.34f;
+    // dark outline, then the mark: a tapering bar and a dot
+    float o = fmaxf(1.0f, h * 0.09f);
+    RoundRect(x - w * 0.5f - o, y - h * 0.5f - o, w + o * 2, h * 0.66f + o * 2, w * 0.5f, Col(20, 14, 6, (int)(230 * alpha)));
+    Circle(x, y + h * 0.36f, w * 0.5f + o, Col(20, 14, 6, (int)(230 * alpha)));
+    RoundRect(x - w * 0.5f, y - h * 0.5f, w, h * 0.66f, w * 0.5f, c.alpha((dim ? 0.75f : 1.0f) * alpha));
+    Circle(x, y + h * 0.36f, w * 0.5f, c.alpha((dim ? 0.75f : 1.0f) * alpha));
+}

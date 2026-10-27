@@ -37,6 +37,8 @@ void RowSel(float x, float y, float w, float h, bool selected, float pulse = 0);
 void Scrollbar(float x, float y, float h, int first, int visible, int total);
 // map PadGlyph from a pad button
 PadGlyph GlyphFor(uint32_t padBtn);
+// "!" of someone with a quest for you, centred on (x, y); dim: may not be offered yet
+void QuestBang(float x, float y, float h, bool dim, float alpha = 1.0f);
 double Now();
 }
 
