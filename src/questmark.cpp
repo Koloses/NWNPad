@@ -1,26 +1,16 @@
 // NWNPad - quest marker on the minimap (single player).
 //
-// The game has no quest markers, but the module knows which conversations move a quest on: dialogue
-// nodes carry the journal tag and entry they set (DLG "Quest" / "QuestEntry"). With the server in this
-// process we read the player's journal (tag + current entry), look through every creature, placeable
-// and door of every area of the module for a conversation with a node that sets a later entry of an
-// active quest, and point at the nearest one. In another area the marker points at the door / area
-// transition that leads there (shortest route over the area transitions). Quests the journal marks as
-// finished (JRL "End") are skipped. The tracked quest is the one updated last, or the one chosen with X
-// on the hub Journal page.
-//
-// The objective itself comes first when the module's scripts reveal it. Compiled scripts (NCS) are read
-// for AddJournalQuestEntry(quest, entry, ...) calls; for each call the string constants that decide it
-// (the tests of the if-blocks around the call, and the strings since the previous journal call) are the
-// tags it depends on - "if the acquired item is HEAD_M2Q2ALENT" in the module's OnAcquireItem script, or
-// "has the item" in the condition of the conversation line that hands the quest in. Scripts come from the
-// module's events, the scripts of every area / creature / placeable / door / trigger, and the actions and
-// conditions of conversation lines. Objects with those tags (creatures alive, placeables, doors,
-// triggers, and items - pointed at where they lie or at whoever carries them, unless you or your party
-// carry them already) and objects whose own scripts write a later entry (a creature's death, a trigger's
-// enter) are the targets; the nearest one is followed. Without any, the marker points at whoever's
-// conversation writes the next entry, as before.
+// The game has no quest markers; the module's own data says what moves each quest on. With the server in
+// this process we read the player's journal (tag + current entry) and go through every object of every
+// area: questplan.cpp works out, from the objects' scripts and conversations (questdata.cpp, ncsflow.cpp),
+// who and what leads to a later journal entry and to which one - the objective (a creature to kill, an item
+// to fetch and whoever carries it, a place to visit), or whoever's conversation takes the quest on. The
+// marker points at the candidate leading to the lowest entry, the nearest one; in another area at the door
+// / transition leading there (shortest route over the area transitions and the teleports the module's
+// scripts and conversations make). Quests the journal marks as finished (JRL "End") are skipped. The
+// tracked quest is the one updated last, or the one chosen on the hub Journal page.
 #include "questmark.h"
+#include "questplan.h"
 #include "game.h"
 #include "res.h"
 #include "log.h"
@@ -42,258 +32,14 @@
 using namespace G;
 
 namespace {
-// ---- minimal GFF reader ----
-struct Gff {
-    std::vector<uint8_t> d;
-    uint32_t so = 0, sc = 0, fo = 0, fc = 0, lo = 0, lc = 0, fdo = 0, fio = 0, lio = 0;
-    bool ok = false;
-    bool Load(std::vector<uint8_t>&& v) {
-        d = std::move(v);
-        if (d.size() < 56) return false;
-        const uint32_t* h = (const uint32_t*)(d.data() + 8);
-        so = h[0]; sc = h[1]; fo = h[2]; fc = h[3]; lo = h[4]; lc = h[5]; fdo = h[6]; fio = h[8]; lio = h[10];
-        ok = so < d.size() && fo < d.size() && lo <= d.size();
-        return ok;
-    }
-    uint32_t U(size_t off) const { return off + 4 <= d.size() ? *(const uint32_t*)(d.data() + off) : 0; }
-    // fields of a struct: (label, type, data)
-    struct Field { std::string label; uint32_t type, data; };
-    std::vector<Field> Fields(uint32_t s) const {
-        std::vector<Field> r;
-        if (s >= sc) return r;
-        size_t sp = so + (size_t)s * 12;
-        uint32_t data = U(sp + 4), n = U(sp + 8);
-        auto one = [&](uint32_t fi) {
-            if (fi >= fc) return;
-            size_t fp = fo + (size_t)fi * 12;
-            uint32_t li = U(fp + 4);
-            Field f;
-            if (li < lc && lo + li * 16 + 16 <= d.size()) f.label.assign((const char*)d.data() + lo + li * 16, strnlen((const char*)d.data() + lo + li * 16, 16));
-            f.type = U(fp); f.data = U(fp + 8);
-            r.push_back(f);
-        };
-        if (n == 1) one(data);
-        else for (uint32_t i = 0; i < n && i < 4096; i++) one(U(fio + data + i * 4));
-        return r;
-    }
-    std::string Str(const Field& f) const {          // CExoString
-        size_t p = fdo + f.data;
-        uint32_t len = U(p);
-        if (p + 4 + len > d.size() || len > 4096) return std::string();
-        return std::string((const char*)d.data() + p + 4, len);
-    }
-    std::string Ref(const Field& f) const {          // CResRef
-        size_t p = fdo + f.data;
-        if (p >= d.size()) return std::string();
-        uint8_t len = d[p];
-        if (p + 1 + len > d.size() || len > 32) return std::string();
-        return std::string((const char*)d.data() + p + 1, len);
-    }
-    std::string Loc(const Field& f) const {          // CExoLocString: the string for the game language, else the TLK entry
-        size_t p = fdo + f.data;
-        uint32_t strref = U(p + 4), n = U(p + 8);
-        size_t q = p + 12;
-        std::string first;
-        for (uint32_t i = 0; i < n && i < 16; i++) {
-            uint32_t len = U(q + 4);
-            if (q + 8 + len > d.size()) break;
-            std::string s((const char*)d.data() + q + 8, len);
-            if (first.empty()) first = s;
-            q += 8 + len;
-        }
-        if (strref != 0xffffffffu) { std::string t = Tlk(strref); if (!t.empty()) return t; }
-        return G2UClean(first.c_str(), (int)first.size());
-    }
-    std::vector<uint32_t> List(const Field& f) const {
-        std::vector<uint32_t> r;
-        size_t p = lio + f.data;
-        uint32_t n = U(p);
-        for (uint32_t i = 0; i < n && i < 100000; i++) r.push_back(U(p + 4 + i * 4));
-        return r;
-    }
-};
-std::string Lower(std::string s) { for (auto& c : s) c = (char)tolower((unsigned char)c); return s; }
-
-// ---- module data (cached) ----
-// ---- compiled scripts: AddJournalQuestEntry calls and the tags they depend on ----
-struct JCall { std::string quest; int entry = -1; std::vector<std::string> tags; };   // lower case
-struct NcsInfo {
-    bool exists = false;
-    std::vector<JCall> calls;
-    std::vector<std::string> strings;
-    std::vector<std::pair<uint16_t, std::string>> creates;    // CreateObject / CreateItemOnObject: (routine, blueprint)
-};
-std::map<std::string, NcsInfo> g_ncs;
-int g_loads = 0;                                           // scripts / conversations read from the game's resources (scan slicing)
-const uint16_t RT_AddJournalQuestEntry = 367;              // nwscript.nss routine numbers
-const uint16_t RT_CreateObject = 243, RT_CreateItemOnObject = 31;
-const NcsInfo& Script(const std::string& resref) {
-    auto it = g_ncs.find(resref);
-    if (it != g_ncs.end()) return it->second;
-    NcsInfo info;
-    std::vector<uint8_t> d;
-    if (!resref.empty() && Res_Load(resref.c_str(), 2010, d) && d.size() > 13 && memcmp(d.data(), "NCS V1.0", 8) == 0) {
-        info.exists = true;
-        g_loads++;
-        struct Op { char k; int pos; int v; std::string s; };    // S string, I int, A action, Z conditional jump (v = target)
-        std::vector<Op> ops;
-        size_t i = 13;
-        auto be16 = [&](size_t o) { return (int)((d[o] << 8) | d[o + 1]); };
-        auto be32 = [&](size_t o) { return (int)(((uint32_t)d[o] << 24) | ((uint32_t)d[o + 1] << 16) | ((uint32_t)d[o + 2] << 8) | d[o + 3]); };
-        while (i + 2 <= d.size()) {
-            int p = (int)i; uint8_t op = d[i], ty = d[i + 1]; i += 2;
-            if (i > d.size()) break;
-            if (op == 0x04) {                                   // CONST
-                if (ty == 5) { if (i + 2 > d.size()) break; int n = be16(i); if (i + 2 + n > d.size()) break; ops.push_back({'S', p, 0, std::string((const char*)&d[i + 2], n)}); i += 2 + n; }
-                else { if (i + 4 > d.size()) break; if (ty == 3) ops.push_back({'I', p, be32(i), {}}); i += 4; }
-            } else if (op == 0x05) { if (i + 3 > d.size()) break; ops.push_back({'A', p, be16(i), {}}); i += 3; }
-            else if (op == 0x1f || op == 0x25) { if (i + 4 > d.size()) break; ops.push_back({'Z', p, p + be32(i), {}}); i += 4; }
-            else if (op == 0x01 || op == 0x03 || op == 0x26 || op == 0x27 || op == 0x21) i += 6;
-            else if (op == 0x1b || op == 0x1d || op == 0x1e || op == 0x23 || op == 0x24 || op == 0x28 || op == 0x29) i += 4;
-            else if (op == 0x2c) i += 8;
-            else if ((op == 0x0b || op == 0x0c) && ty == 0x24) i += 2;
-        }
-        size_t last = 0;
-        for (size_t k = 0; k < ops.size(); k++) {
-            if (ops[k].k == 'S') info.strings.push_back(Lower(ops[k].s));
-            if (ops[k].k == 'A' && (ops[k].v == RT_CreateObject || ops[k].v == RT_CreateItemOnObject)) {
-                // the blueprint is the last string pushed (the template argument)
-                for (size_t q = k, n = 0; q > 0 && n < 8; n++) {
-                    q--;
-                    if (ops[q].k == 'A') break;
-                    if (ops[q].k == 'S') { if (!ops[q].s.empty()) info.creates.push_back({(uint16_t)ops[k].v, Lower(ops[q].s)}); break; }
-                }
-            }
-            if (ops[k].k != 'A' || ops[k].v != RT_AddJournalQuestEntry) continue;
-            JCall c;
-            // arguments are pushed last to first: the quest tag is the last string, the entry the int before it
-            size_t q = k;
-            while (q > 0) { q--; if (ops[q].k == 'S') { c.quest = Lower(ops[q].s); break; } }
-            if (q > 0 && ops[q - 1].k == 'I' && ops[q - 1].pos + 6 == ops[q].pos) c.entry = ops[q - 1].v;   // a constant entry
-            std::set<std::string> t;
-            // the tests of the blocks around the call, and the strings of the innermost block before it (in a
-            // long script of many item checks, earlier unrelated blocks are not the call's business)
-            size_t inner = last;
-            for (size_t z = 0; z < k; z++)
-                if (ops[z].k == 'Z' && ops[z].pos < ops[k].pos && ops[k].pos < ops[z].v) {
-                    for (size_t x = z >= 8 ? z - 8 : 0; x < z; x++) if (ops[x].k == 'S') t.insert(Lower(ops[x].s));
-                    if (z + 1 > inner) inner = z + 1;
-                }
-            for (size_t x = inner; x < k; x++) if (ops[x].k == 'S') t.insert(Lower(ops[x].s));
-            // (the quest's own tag stays: an item can be tagged like its quest - M2Q3E_BROOCH / m2q3E_Brooch)
-            for (auto& w : t) if (w.compare(0, 16, "nw_journal_entry") != 0) c.tags.push_back(w);
-            if (!c.quest.empty()) info.calls.push_back(c);
-            last = k + 1;
-        }
-    }
-    return g_ncs.emplace(resref, std::move(info)).first->second;
-}
-
-// a conversation: the journal entries its lines write (directly, or by their action script) and the tags
-// the conditions leading to those lines test
-struct DlgSet { std::string quest; uint32_t entry; std::vector<std::string> tags; };
-struct DlgInfo {
-    std::vector<DlgSet> sets;
-    std::map<std::string, std::map<uint32_t, std::vector<std::string>>> byQuest;   // quest -> entry -> tags (no repeats)
-};
-std::map<std::string, DlgInfo> g_dlg;
-std::map<std::string, std::set<uint32_t>> g_end;       // quest tag -> entries that end it
-std::map<std::string, std::string> g_title;            // quest tag -> title
-std::map<std::string, uint32_t> g_first;               // quest tag -> its first entry (the lowest)
-bool g_jrlLoaded = false;
+std::string Lower(std::string s) { return QD_Lower(std::move(s)); }
 void* g_jrlModule = nullptr;
 std::vector<uint32_t> g_fakeOffers;
 bool g_debugTargets = false;           // log the targets of every quest on the next scan
 
-const DlgInfo& Dialog(const std::string& resref) {
-    auto it = g_dlg.find(resref);
-    if (it != g_dlg.end()) return it->second;
-    DlgInfo info;
-    std::vector<uint8_t> v;
-    Gff g;
-    if (Res_Load(resref.c_str(), 2029, v) && g.Load(std::move(v))) {
-        g_loads++;
-        // conditions of the links to each entry (0) / reply (1)
-        std::map<uint32_t, std::set<std::string>> cond[2];
-        std::vector<uint32_t> nodes[2];
-        for (auto& top : g.Fields(0)) {
-            if (top.type != 15) continue;
-            int kind = top.label == "EntryList" ? 0 : top.label == "ReplyList" ? 1 : top.label == "StartingList" ? 2 : -1;
-            if (kind < 0) continue;
-            if (kind < 2) nodes[kind] = g.List(top);
-            auto link = [&](uint32_t ls, int to) {
-                uint32_t idx = 0; std::string act;
-                for (auto& f : g.Fields(ls)) { if (f.label == "Index") idx = f.data; if (f.label == "Active" && f.type == 11) act = Lower(g.Ref(f)); }
-                if (!act.empty()) cond[to][idx].insert(act);
-            };
-            if (kind == 2) { for (uint32_t ls : g.List(top)) link(ls, 0); continue; }
-            for (uint32_t s : nodes[kind])
-                for (auto& f : g.Fields(s))
-                    if (f.type == 15 && (f.label == "RepliesList" || f.label == "EntriesList"))
-                        for (uint32_t ls : g.List(f)) link(ls, f.label == "RepliesList" ? 1 : 0);
-        }
-        for (int kind = 0; kind < 2; kind++)
-            for (uint32_t ni = 0; ni < nodes[kind].size(); ni++) {
-                std::string q, act; uint32_t e = 0; bool hasE = false;
-                for (auto& f : g.Fields(nodes[kind][ni])) {
-                    if (f.label == "Quest" && f.type == 10) q = Lower(g.Str(f));
-                    else if (f.label == "QuestEntry" && f.type == 4) { e = f.data; hasE = true; }
-                    else if (f.label == "Script" && f.type == 11) act = Lower(g.Ref(f));
-                }
-                // only lines that write a journal entry matter (their conditions are read only then)
-                bool sets = !q.empty() && hasE;
-                const NcsInfo* as = act.empty() ? nullptr : &Script(act);
-                if (!sets && !(as && !as->calls.empty())) continue;
-                std::vector<std::string> ct;
-                auto c = cond[kind].find(ni);
-                if (c != cond[kind].end()) for (auto& cs : c->second) for (auto& w : Script(cs).strings) ct.push_back(w);
-                if (sets) info.sets.push_back({q, e, ct});
-                if (as)
-                    for (auto& jc : as->calls) {
-                        DlgSet ds{jc.quest, (uint32_t)(jc.entry < 0 ? 0x7fffffff : jc.entry), ct};
-                        ds.tags.insert(ds.tags.end(), jc.tags.begin(), jc.tags.end());
-                        info.sets.push_back(ds);
-                    }
-            }
-    }
-    std::map<std::string, std::map<uint32_t, std::set<std::string>>> bq;
-    for (auto& st : info.sets) bq[st.quest][st.entry].insert(st.tags.begin(), st.tags.end());
-    for (auto& q : bq) for (auto& e : q.second) info.byQuest[q.first][e.first].assign(e.second.begin(), e.second.end());
-    return g_dlg.emplace(resref, info).first->second;
-}
-
-void LoadJournalDefs() {
-    g_end.clear(); g_title.clear(); g_first.clear();
-    std::vector<uint8_t> v;
-    Gff g;
-    if (!Res_Load("module", 2056, v) || !g.Load(std::move(v))) { Log("quest: no module.jrl"); return; }
-    for (auto& top : g.Fields(0)) {
-        if (top.label != "Categories" || top.type != 15) continue;
-        for (uint32_t c : g.List(top)) {
-            std::string tag, title; std::set<uint32_t> ends; uint32_t first = 0xffffffffu;
-            for (auto& f : g.Fields(c)) {
-                if (f.label == "Tag" && f.type == 10) tag = Lower(g.Str(f));
-                if (f.label == "Name" && f.type == 12) title = g.Loc(f);
-                if (f.label == "EntryList" && f.type == 15)
-                    for (uint32_t e : g.List(f)) {
-                        uint32_t id = 0; bool end = false;
-                        for (auto& ef : g.Fields(e)) {
-                            if (ef.label == "ID") id = ef.data;
-                            if (ef.label == "End") end = (ef.data & 0xffff) != 0;
-                        }
-                        if (end) ends.insert(id);
-                        if (id < first) first = id;
-                    }
-            }
-            if (!tag.empty()) { g_end[tag] = ends; g_title[tag] = title; if (first != 0xffffffffu) g_first[tag] = first; }
-        }
-    }
-    Log("quest: module.jrl has %d quests", (int)g_end.size());
-}
-
 // ---- server (in-process in single player) ----
 typedef void* (*GetSrvObj_t)(void* srv, uint32_t id);
-GetSrvObj_t fSrvGameObject = nullptr, fSrvCreature = nullptr, fSrvArea = nullptr;
+GetSrvObj_t fSrvGameObject = nullptr, fSrvCreature = nullptr;
 typedef void* (*Thiscall0_t)(void*);
 const uintptr_t VA_SrvGetModule = 0x1405599a0, VA_GetJournal = 0x14038fb10, VA_LookupTarget = 0x1404fc930;
 const uintptr_t VA_SrvAreaById = 0x1405595a0;
@@ -309,10 +55,10 @@ void* SrvObject(uint32_t id) {
     return g ? VCall<void* (*)(void*)>(g, 0x20)(g) : nullptr;
 }
 void* SrvArea(uint32_t id) { void* s = Srv(); return s ? ((GetSrvObj_t)A(VA_SrvAreaById))(s, id) : nullptr; }
-Vec3 SrvPos(void* o) { return F<Vec3>(o, 0xa4); }
+QP::P3 SrvPos(void* o) { Vec3 v = F<Vec3>(o, 0xa4); return QP::P3{v.x, v.y, v.z}; }
+Vec3 V(const QP::P3& p) { return Vec3{p.x, p.y, p.z}; }
 uint32_t SrvAreaId(void* o) { return F<uint32_t>(o, 0xa0); }
 
-struct Target { uint32_t id; uint32_t area; Vec3 pos; bool isArea = false; };
 struct Mark {
     std::string tag;             // quest (lower case)
     bool found = false;          // something to point at
@@ -335,10 +81,9 @@ bool g_trackNone = false;        // unfollowed: no marker until a quest moves on
 uint64_t g_noneWhen = 0;         // newest journal entry when it was unfollowed
 
 struct Active { std::string tag; uint32_t state; uint64_t when; };
-std::set<std::string> g_known;    // every quest in the journal, finished ones too
-std::vector<Active> ActiveQuests(void* srvPlayer) {
+std::vector<Active> ActiveQuests(void* srvPlayer, std::set<std::string>& known) {
     std::vector<Active> r;
-    g_known.clear();
+    known.clear();
     void* j = ((Thiscall0_t)A(VA_GetJournal))(srvPlayer);
     if (!j) return r;
     char* base = F<char*>(j, 0);
@@ -351,37 +96,33 @@ std::vector<Active> ActiveQuests(void* srvPlayer) {
         if (!t || len == 0 || len > 64) continue;
         Active a; a.tag = Lower(std::string(t, len)); a.state = F<uint32_t>(e, 0x38);
         a.when = ((uint64_t)F<uint32_t>(e, 0x20) << 32) | F<uint32_t>(e, 0x24);
-        g_known.insert(a.tag);
-        auto end = g_end.find(a.tag);
-        if (end != g_end.end() && end->second.count(a.state)) continue;      // finished
+        known.insert(a.tag);
+        auto def = QD_quests.find(a.tag);
+        if (def != QD_quests.end() && def->second.ends.count(a.state)) continue;      // finished
         r.push_back(a);
     }
     return r;
 }
 
 // the conversation of an object (creature / placeable / door), "" if none
-const DlgInfo* ObjDialog(void* o, uint8_t type) {
+std::string ObjDialog(void* o, uint8_t type) {
     const char* src = nullptr;
     if (type == 5) { void* st = F<void*>(o, 0xad0); if (st && Readable((char*)st + 0x68, 16)) src = (char*)st + 0x68; }
     else if (type == 9) src = (char*)o + 0x354;
     else if (type == 10) src = (char*)o + 0x400;
-    if (!src) return nullptr;
+    if (!src) return std::string();
     char ref[17] = {};
     memcpy(ref, src, 16);
-    if (!ref[0]) return nullptr;
-    const DlgInfo& d = Dialog(Lower(ref));
-    return d.sets.empty() ? nullptr : &d;
+    return Lower(ref);
 }
 
-// scripts of a server object that write journal entries: the event scripts are CExoStrings in a block of
-// the object (module, area, creature, placeable, door, trigger); every string there naming a compiled
-// script is checked. Cached per object.
+// the event scripts of a server object: CExoStrings in a block of the object (module, area, creature,
+// placeable, door, trigger); every string there that looks like a resref. Cached per object.
 std::map<void*, std::pair<uint32_t, std::vector<std::string>>> g_objScripts;
 const std::vector<std::string>& ObjScripts(void* o, int type) {
-    auto& cache = g_objScripts;
     uint32_t id = type == 3 || type == 4 ? 0 : F<uint32_t>(o, 8);
-    auto it = cache.find(o);
-    if (it != cache.end() && it->second.first == id) return it->second.second;
+    auto it = g_objScripts.find(o);
+    if (it != g_objScripts.end() && it->second.first == id) return it->second.second;
     size_t from = 0, to = 0;
     switch (type) {
         case 3: from = 0x1b0; to = 0x2a0; break;      // module
@@ -400,10 +141,9 @@ const std::vector<std::string>& ObjScripts(void* o, int type) {
         for (char c : name) if ((unsigned char)c <= 32 || (unsigned char)c > 126) ok = false;
         if (!ok) continue;
         name = Lower(name);
-        const NcsInfo& ni = Script(name);
-        if ((!ni.calls.empty() || !ni.creates.empty()) && std::find(r.begin(), r.end(), name) == r.end()) r.push_back(name);
+        if (std::find(r.begin(), r.end(), name) == r.end()) r.push_back(name);
     }
-    auto& slot = cache[o];
+    auto& slot = g_objScripts[o];
     slot = {id, std::move(r)};
     return slot.second;
 }
@@ -427,30 +167,67 @@ std::string SrvTag(void* g) {
     return p && n && n < 64 && Readable(p, n) ? Lower(std::string(p, n)) : std::string();
 }
 
-// The scan runs in slices of about a millisecond per frame (a whole module is thousands of objects),
-// then the result replaces the previous one at once; a new round starts 2 s after the last one ended.
-struct Edge { uint32_t from, to; Vec3 at; uint32_t obj; };
+// The scan runs in slices of about a millisecond per frame (a whole module is thousands of objects, and
+// every script and conversation is read once), then the result replaces the previous one at once; a new
+// round starts 2 s after the last one ended.
 struct Job {
     bool running = false;
     void* mod = nullptr;                                     // the module it scans (another one: start over)
     int phase = 0, ai = 0, i = 0;
     uint32_t b = 0, me = 0;
     std::vector<Active> act;
-    std::map<std::string, uint32_t> state;
-    std::map<std::string, std::set<std::string>> goal;                  // quest -> tags it waits for
-    std::map<std::string, std::vector<Target>> objectives, givers, byTag;
-    std::map<std::string, std::vector<std::string>> questsOf;            // tag -> quests waiting for it
-    std::vector<Edge> edges;
-    std::vector<Offer> offers;
-    std::vector<std::pair<Target, std::string>> spawners;   // an object whose script creates something with this tag
-    std::vector<std::pair<Target, std::pair<uint16_t, std::string>>> created;   // (object, what its scripts create)
-    size_t ci = 0;
-    // a conversation's part in this round, worked out once however many people use it
-    struct DlgRound { std::vector<std::string> moves, offers; bool maybe = true; };
-    std::map<const DlgInfo*, DlgRound> dlg;
+    QP::Round r;
+    std::vector<QP::Edge> edges;                             // area transitions
+    void* sp = nullptr;                                      // the player's server creature
+    std::vector<std::pair<uint32_t, uint32_t>> later;        // (area, object) waiting for scripts being worked out
+    size_t li = 0;
 } J;
 
-bool Later(const std::string& q, int64_t entry) { auto it = J.state.find(q); return it != J.state.end() && (entry < 0 || entry > (int64_t)it->second); }
+// local ints the module's conversations and scripts test: the module's own, or the player's
+bool ReadLocalInt(const std::string& key, int& v) {
+    static auto fGetInt = (int (*)(void*, void*))GetProcAddress(GetModuleHandleA(nullptr), "?GetInt@CNWSScriptVarTable@@QEAAHAEAVCExoString@@@Z");
+    if (!fGetInt || key.size() < 3 || key[1] != ':') return false;
+    void* tbl = nullptr;
+    if (key[0] == 'm' && J.mod) tbl = (char*)J.mod + 0x170;           // CNWSModule::m_ScriptVars
+    else if (key[0] == 'p' && J.sp) tbl = (char*)J.sp + 0x108;        // CNWSObject::m_ScriptVars
+    if (!tbl) return false;
+    std::string name = key.substr(2);
+    struct { const char* p; uint32_t len, cap; } s{name.c_str(), (uint32_t)name.size(), (uint32_t)name.size() + 1};
+    v = fGetInt(tbl, &s);
+    return true;
+}
+
+// one worker thread works the scripts out (a big one can take milliseconds)
+struct Work { void (*fn)(void*); void* arg; };
+CRITICAL_SECTION g_wq;
+HANDLE g_wev = nullptr;
+std::deque<Work> g_work;
+DWORD WINAPI Worker(void*) {
+    for (;;) {
+        WaitForSingleObject(g_wev, INFINITE);
+        for (;;) {
+            Work w{nullptr, nullptr};
+            EnterCriticalSection(&g_wq);
+            if (!g_work.empty()) { w = g_work.front(); g_work.pop_front(); }
+            LeaveCriticalSection(&g_wq);
+            if (!w.fn) break;
+            w.fn(w.arg);
+        }
+    }
+    return 0;
+}
+void RunAsync(void (*fn)(void*), void* arg) {
+    EnterCriticalSection(&g_wq);
+    g_work.push_back({fn, arg});
+    LeaveCriticalSection(&g_wq);
+    SetEvent(g_wev);
+}
+
+LARGE_INTEGER g_sliceStart, g_freq;
+double g_budget = 1.0;
+double SliceMs() { LARGE_INTEGER t; QueryPerformanceCounter(&t); return (t.QuadPart - g_sliceStart.QuadPart) * 1000.0 / g_freq.QuadPart; }
+bool CanLoad() { return SliceMs() < g_budget; }
+
 bool Mine(uint32_t id) {                                   // the hero or one of his associates
     id &= 0x7fffffffu;
     if (id == J.me) return true;
@@ -458,131 +235,46 @@ bool Mine(uint32_t id) {                                   // the hero or one of
     return c && (GD::MasterId(c) & 0x7fffffffu) == J.me;
 }
 int (*fDead)(void*) = nullptr;
-// a blueprint something is created from: its tag, conversation and scripts
-struct Blueprint { bool ok = false; std::string tag; const DlgInfo* dlg = nullptr; std::vector<std::string> scripts; };
-std::map<std::string, Blueprint> g_bp;
-const Blueprint& GetBlueprint(uint16_t routine, const std::string& resref) {
-    std::string key = (routine == RT_CreateItemOnObject ? "i:" : "o:") + resref;
-    auto it = g_bp.find(key);
-    if (it != g_bp.end()) return it->second;
-    Blueprint b;
-    // CreateObject: a creature, placeable, store ... (the type is a variable in many scripts: try the kinds that talk)
-    const uint16_t types[] = {2027, 2044};                     // utc, utp
-    std::vector<uint16_t> try_;
-    if (routine == RT_CreateItemOnObject) try_.push_back(2025); else try_.assign(types, types + 2);
-    for (uint16_t ty : try_) {
-        std::vector<uint8_t> v; Gff g;
-        if (!Res_Load(resref.c_str(), ty, v) || !g.Load(std::move(v))) continue;
-        g_loads++;
-        b.ok = true;
-        for (auto& f : g.Fields(0)) {
-            if (f.label == "Tag" && f.type == 10) b.tag = Lower(g.Str(f));
-            else if (f.label == "Conversation" && f.type == 11) { std::string c = Lower(g.Ref(f)); if (!c.empty()) { const DlgInfo& d = Dialog(c); if (!d.byQuest.empty()) b.dlg = &d; } }
-            else if (f.type == 11 && (f.label.compare(0, 6, "Script") == 0 || f.label.compare(0, 2, "On") == 0)) {
-                std::string sc = Lower(g.Ref(f));
-                if (!sc.empty() && !Script(sc).calls.empty()) b.scripts.push_back(sc);
-            }
-        }
-        break;
-    }
-    return g_bp.emplace(key, std::move(b)).first->second;
-}
-
-void AddCalls(const std::vector<std::string>& scripts, const Target* self) {
-    for (auto& sc : scripts) {
-        const NcsInfo& ni = Script(sc);
-        for (auto& c : ni.calls) {
-            if (!Later(c.quest, c.entry)) continue;
-            J.goal[c.quest].insert(c.tags.begin(), c.tags.end());
-            if (self) J.objectives[c.quest].push_back(*self);
-        }
-        // what it creates: someone whose conversation (or scripts) moves a quest on, or a thing with a tag a
-        // quest waits for (matched once the tags are known) - the object that creates it is the way there
-        if (!self || self->isArea) continue;
-        // (blueprints not read yet are read in their own phase, one per frame)
-        for (auto& cr : ni.creates) J.created.push_back({*self, cr});
-    }
-}
-void Created(const Target& self, const std::pair<uint16_t, std::string>& cr) {
-    const Blueprint& bp = GetBlueprint(cr.first, cr.second);
-    if (!bp.ok) return;
-    if (!bp.tag.empty()) J.spawners.push_back({self, bp.tag});
-    if (bp.dlg)
-        for (auto& q : bp.dlg->byQuest) {
-            auto cur = J.state.find(q.first);
-            if (cur != J.state.end() && q.second.upper_bound(cur->second) != q.second.end()) J.objectives[q.first].push_back(self);
-        }
-    for (auto& bsc : bp.scripts)
-        for (auto& c : Script(bsc).calls)
-            if (Later(c.quest, c.entry)) J.objectives[c.quest].push_back(self);
-}
 
 // phase 0: the journal, the module's own scripts
-bool Begin(void* srv, void* sp, void* mod) {
+bool Begin(void* sp, void* mod) {
     J = Job();
     J.running = true;
     J.mod = mod;
-    if (mod != g_jrlModule) { g_jrlModule = mod; g_dlg.clear(); g_ncs.clear(); g_objScripts.clear(); g_bp.clear(); LoadJournalDefs(); }
-    J.act = ActiveQuests(sp);
-    for (auto& a : J.act) J.state[a.tag] = a.state;
+    J.sp = sp;
+    QP::LocalInt = ReadLocalInt;
+    if (mod != g_jrlModule) { g_jrlModule = mod; QD_Reset(); g_objScripts.clear(); QD_LoadJournal(); Log("quest: module.jrl has %d quests", (int)QD_quests.size()); }
+    J.act = ActiveQuests(sp, J.r.known);
+    for (auto& a : J.act) J.r.state[a.tag] = a.state;
     J.me = Id(Player()) & 0x7fffffffu;
     for (uint32_t f : g_fakeOffers) {                        // tests: dev command qoffer
         void* o = SrvObject(f);
-        if (o) J.offers.push_back({f | 0x80000000u, SrvAreaId(o), SrvPos(o), false, {J.act.empty() ? std::string("test") : J.act[0].tag}});
+        if (o) J.r.offers.push_back({f, SrvAreaId(o), SrvPos(o), false, {J.act.empty() ? std::string("test") : J.act[0].tag}});
     }
-    AddCalls(ObjScripts(mod, 3), nullptr);
-    (void)srv;
     return true;
 }
 
-// phase 1: one object of an area: tag, own scripts, conversation (quest lines, quests offered), transitions
-void Object(uint32_t areaId, uint32_t id) {
+// phase 1: one object of an area (false: something not read yet, again next slice)
+bool Object(uint32_t areaId, uint32_t id) {
     void* o = SrvObject(id);
-    if (!o) return;
+    if (!o) return true;
     uint8_t t = F<uint8_t>(o, 0xc);
+    if (t == 12) {                                         // waypoints: where teleports land
+        QP::Obj w; w.id = id; w.area = areaId; w.pos = SrvPos(o); w.type = 12; w.tag = SrvTag(o);
+        return J.r.Object(w);
+    }
     bool thing = t == 5 || t == 7 || t == 9 || t == 10;
-    bool skip = t == 5 && (Mine(id) || (fDead && fDead(o)));
-    if (thing && !skip) {
-        Target self{id, areaId, SrvPos(o)};
-        std::string tag = SrvTag(o);
-        if (!tag.empty()) J.byTag[tag].push_back(self);
-        AddCalls(ObjScripts(o, t), &self);
-        const DlgInfo* dd = t != 7 ? ObjDialog(o, t) : nullptr;
-        if (dd) {
-            auto it = J.dlg.find(dd);
-            if (it == J.dlg.end()) {
-                Job::DlgRound rd;
-                for (auto& q : dd->byQuest) {
-                    const std::string& quest = q.first;
-                    // a line that writes the first entry of a quest you don't have: its owner offers it
-                    auto fe = g_first.find(quest);
-                    if (!g_known.count(quest) && fe != g_first.end()) {
-                        auto e = q.second.find(fe->second);
-                        auto en = g_end.find(quest);               // started and finished at once: nothing to do
-                        if (e != q.second.end() && (en == g_end.end() || !en->second.count(e->first))) {
-                            // its conditions test another quest you haven't got: maybe not yet
-                            bool maybe = false;
-                            for (auto& w : e->second)
-                                if (w.compare(0, 16, "nw_journal_entry") == 0 && w.substr(16) != quest && !g_known.count(w.substr(16)) && g_title.count(w.substr(16))) maybe = true;
-                            if (!maybe) rd.maybe = false;
-                            rd.offers.push_back(quest);
-                        }
-                    }
-                    // lines that write a later entry of an active quest: the owner moves it on
-                    auto cur = J.state.find(quest);
-                    if (cur == J.state.end()) continue;
-                    bool any = false;
-                    for (auto e = q.second.upper_bound(cur->second); e != q.second.end(); ++e) {
-                        J.goal[quest].insert(e->second.begin(), e->second.end());
-                        any = true;
-                    }
-                    if (any) rd.moves.push_back(quest);
-                }
-                it = J.dlg.emplace(dd, std::move(rd)).first;
-            }
-            for (auto& q : it->second.moves) J.givers[q].push_back(self);
-            if (t == 5 && !it->second.offers.empty()) J.offers.push_back({id | 0x80000000u, areaId, SrvPos(o), it->second.maybe, it->second.offers});
-        }
+    bool mine = t == 5 && Mine(id);
+    bool skip = t == 5 && fDead && fDead(o);
+    if (mine && id != J.me && !skip) {                     // a henchman: only his conversation (his tale)
+        QP::Obj ob; ob.id = id; ob.area = areaId; ob.pos = SrvPos(o); ob.type = t; ob.tag = SrvTag(o); ob.party = true;
+        ob.dialog = ObjDialog(o, t);
+        if (!J.r.Object(ob)) return false;
+    } else if (thing && !skip && !mine) {
+        QP::Obj ob; ob.id = id; ob.area = areaId; ob.pos = SrvPos(o); ob.type = t; ob.tag = SrvTag(o);
+        ob.scripts = ObjScripts(o, t);
+        if (t != 7) ob.dialog = ObjDialog(o, t);
+        if (!J.r.Object(ob)) return false;
     }
     if (t == 10 || t == 7) {
         void* dst = ((void* (*)(void*))A(VA_LookupTarget))((char*)o + 0x288);
@@ -591,6 +283,7 @@ void Object(uint32_t areaId, uint32_t id) {
             if (da != areaId && da != 0x7f000000) J.edges.push_back({areaId, da, SrvPos(o), id});
         }
     }
+    return true;
 }
 
 // phase 3: one bucket of the server's object table: items with a tag a quest waits for, where they are
@@ -598,8 +291,8 @@ void Bucket(void* srv, void* node0) {
     for (char* node = (char*)node0; node; node = F<char*>(node, 0x10)) {
         void* g = F<void*>(node, 8);
         if (!g || F<uint8_t>(g, 0xc) != 6) continue;
-        auto qs = J.questsOf.find(SrvTag(g));
-        if (qs == J.questsOf.end()) continue;
+        std::string tag = SrvTag(g);
+        if (tag.empty()) continue;
         // the outermost holder: a container item's holder, a creature, a placeable; or the ground
         uint32_t owner = 0x7f000000; void* cur = g;
         for (int depth = 0; depth < 4; depth++) {
@@ -612,22 +305,22 @@ void Bucket(void* srv, void* node0) {
             if (F<uint8_t>(pg, 0xc) != 6) break;
             cur = pg;
         }
-        Target tg;
+        QP::Target tg;
         if (owner == 0x7f000000) {                          // lying somewhere
             void* o = VCall<void* (*)(void*)>(g, 0x20)(g);
             if (!o) continue;
-            tg = {F<uint32_t>(node, 0), SrvAreaId(o), SrvPos(o)};
+            tg.id = F<uint32_t>(node, 0); tg.area = SrvAreaId(o); tg.pos = SrvPos(o);
         } else {
-            if (Mine(owner)) continue;                      // already yours
+            if (Mine(owner)) { J.r.Item(tag, tg, true); continue; }   // already yours
             void* og = fSrvGameObject(srv, owner & 0x7fffffffu);
             void* o = og ? VCall<void* (*)(void*)>(og, 0x20)(og) : nullptr;
             uint8_t ot = o ? F<uint8_t>(o, 0xc) : 0;
             if (!o || (ot != 5 && ot != 9)) continue;      // stores, the dead's carried things ...
             if (ot == 5 && fDead && fDead(o)) continue;
-            tg = {owner, SrvAreaId(o), SrvPos(o)};
+            tg.id = owner; tg.area = SrvAreaId(o); tg.pos = SrvPos(o);
         }
         if (tg.area == 0x7f000000 || !tg.area) continue;
-        for (auto& q : qs->second) J.objectives[q].push_back(tg);
+        J.r.Item(tag, tg);
     }
 }
 
@@ -635,9 +328,10 @@ void Bucket(void* srv, void* node0) {
 void Finish(void* srv, void* sp) {
     std::vector<Mark> marks;
     uint32_t myArea = SrvAreaId(sp);
-    Vec3 mp = SrvPos(sp);
-    auto& edges = J.edges;
-    auto dist = [&](Vec3 a, Vec3 b) { float dx = a.x - b.x, dy = a.y - b.y; return sqrtf(dx * dx + dy * dy); };
+    QP::P3 mp = SrvPos(sp);
+    std::vector<QP::Edge> edges = J.edges;
+    edges.insert(edges.end(), J.r.edges.begin(), J.r.edges.end());
+    auto dist = [&](const QP::P3& a, const QP::P3& b) { float dx = a.x - b.x, dy = a.y - b.y; return sqrtf(dx * dx + dy * dy); };
     // first exit of the shortest route (fewest transitions) from the player's area to every other area
     std::map<uint32_t, int> firstEdge, hops;
     {
@@ -655,54 +349,56 @@ void Finish(void* srv, void* sp) {
     }
     for (auto& a : J.act) {
         Mark m; m.tag = a.tag; m.when = a.when;
-        // the objective (nearest) when known and reachable, else whoever's conversation moves the quest on
-        auto pick = [&](const std::vector<Target>& tv) {
-            const Target* best = nullptr; float bd = 1e9f;
-            for (auto& t : tv) if (t.area == myArea && !t.isArea && dist(t.pos, mp) < bd) { bd = dist(t.pos, mp); best = &t; }
-            if (best) { m.found = true; m.here = true; m.point = best->pos; m.object = best->id | 0x80000000u; return true; }
-            // another area: fewest transitions away; among those, the exit nearest to you
-            int bestHops = 1 << 30; const Edge* via = nullptr;
-            for (auto& t : tv) {
-                auto fe = firstEdge.find(t.area);
-                if (fe == firstEdge.end()) continue;
-                const Edge* e = &edges[fe->second];
-                if (!via || hops[t.area] < bestHops || (hops[t.area] == bestHops && dist(e->at, mp) < dist(via->at, mp))) { bestHops = hops[t.area]; via = e; }
-            }
-            if (via) { m.found = true; m.here = false; m.point = via->at; m.object = via->obj | 0x80000000u; return true; }
-            return false;
-        };
-        std::vector<Target> tv;
-        for (auto& t : J.objectives[a.tag]) if (!(t.isArea && t.area == myArea)) tv.push_back(t);
-        m.objective = pick(tv);
-        if (!m.objective) {
-            // whose conversation moves it on - leaving out those you talked to when it moved on before (a druid
-            // already rescued still has the line, behind a condition), unless nobody else is left
-            tv.clear();
-            std::set<uint32_t> done = TalkLog_MovedBy(Quest_Title(a.tag));
-            std::set<std::string> doneNames = TalkLog_MovedByName(Quest_Title(a.tag));   // older logs: by name
-            for (auto& t : J.givers[a.tag]) {
-                if (done.count(t.id & 0x7fffffffu)) continue;
-                if (!doneNames.empty() && doneNames.count(Lower(SrvName(t.id)))) continue;
-                tv.push_back(t);
-            }
-            if (tv.empty()) tv = J.givers[a.tag];
-            pick(tv);
+        // the candidates you can get to: objectives, and whoever's conversation moves it on - leaving out
+        // those you talked to when it moved on before (a druid already rescued still has the line, behind a
+        // condition), unless nobody else is left
+        std::vector<const QP::Target*> cand;
+        auto reach = [&](const QP::Target& t) { return t.isArea ? t.area != myArea && firstEdge.count(t.area) : (t.area == myArea || firstEdge.count(t.area)); };
+        for (auto& t : J.r.objectives[a.tag]) if (reach(t)) cand.push_back(&t);
+        std::set<uint32_t> done = TalkLog_MovedBy(Quest_Title(a.tag));
+        std::set<std::string> doneNames = TalkLog_MovedByName(Quest_Title(a.tag));   // older logs: by name
+        std::vector<const QP::Target*> gv;
+        for (auto& t : J.r.givers[a.tag]) {
+            if (t.party || !reach(t)) continue;
+            if (done.count(t.id & 0x7fffffffu)) continue;
+            if (!doneNames.empty() && doneNames.count(Lower(SrvName(t.id)))) continue;
+            gv.push_back(&t);
         }
+        if (gv.empty()) for (auto& t : J.r.givers[a.tag]) if (!t.party && reach(t)) gv.push_back(&t);
+        cand.insert(cand.end(), gv.begin(), gv.end());
+        for (auto& t : J.r.givers[a.tag]) if (t.party) cand.push_back(&t);
+        std::vector<const QP::Target*> best = J.r.Best(a.tag, cand);
+        // the nearest: in this area, else fewest transitions away and the exit nearest to you
+        const QP::Target* pick = nullptr; float bd = 1e9f;
+        for (auto* t : best) if (!t->isArea && t->area == myArea && dist(t->pos, mp) < bd) { bd = dist(t->pos, mp); pick = t; }
+        if (pick) { m.found = m.here = true; m.point = V(pick->pos); m.object = pick->id | 0x80000000u; }
+        else {
+            int bestHops = 1 << 30; const QP::Edge* via = nullptr;
+            for (auto* t : best) {
+                auto fe = firstEdge.find(t->area);
+                if (fe == firstEdge.end()) continue;
+                const QP::Edge* e = &edges[fe->second];
+                if (!via || hops[t->area] < bestHops || (hops[t->area] == bestHops && dist(e->at, mp) < dist(via->at, mp))) { bestHops = hops[t->area]; via = e; pick = t; }
+            }
+            if (via) { m.found = true; m.here = false; m.point = V(via->at); m.object = via->obj | 0x80000000u; }
+        }
+        m.objective = pick && !pick->giver;
         if (g_debugTargets) {
             std::string d;
-            for (auto& t : tv) {
-                void* g = fSrvGameObject(srv, t.id & 0x7fffffffu);
-                char b2[96]; snprintf(b2, sizeof b2, " %s@%08x", t.isArea ? "(area)" : g ? SrvTag(g).c_str() : "?", t.area);
-                if (d.size() < 600) d += b2;
+            for (auto* t : best) {
+                void* g = fSrvGameObject(srv, t->id & 0x7fffffffu);
+                char b2[160]; snprintf(b2, sizeof b2, " %s@%08x<%u %s %s>", t->isArea ? "(area)" : g ? SrvTag(g).c_str() : "?", t->area, t->entry, t->why, t->giver ? "" : t->via.c_str());
+                if (d.size() < 800) d += b2;
             }
-            std::string gt; for (auto& x : J.goal[a.tag]) if (gt.size() < 300) gt += " " + x;
-            Log("quest:   %s %s:%s | tags:%s", a.tag.c_str(), m.objective ? "objective" : "giver", d.c_str(), gt.c_str());
+            std::string gt; for (auto& x : J.r.goal[a.tag]) if (gt.size() < 300) gt += " " + x.first;
+            Log("quest:   %s@%u %s:%s | tags:%s", a.tag.c_str(), a.state, pick ? (pick->giver ? "giver" : "objective") : "-", d.c_str(), gt.c_str());
         }
         marks.push_back(m);
     }
     g_debugTargets = false;
     S.marks.swap(marks);
-    S.offers.swap(J.offers);
+    S.offers.clear();
+    for (auto& o : J.r.offers) S.offers.push_back({o.id | 0x80000000u, o.area, V(o.pos), o.maybe, o.quests});
     S.area = myArea;
     // followed quest: the chosen one, else the one updated last
     const Mark* tr = nullptr;
@@ -729,9 +425,10 @@ void Finish(void* srv, void* sp) {
 
 // one slice of the scan, at most ~budget ms
 void Step(double budgetMs) {
-    g_loads = 0;
-    LARGE_INTEGER f, t0, t; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
-    auto elapsed = [&]() { QueryPerformanceCounter(&t); return (t.QuadPart - t0.QuadPart) * 1000.0 / f.QuadPart; };
+    QueryPerformanceFrequency(&g_freq); QueryPerformanceCounter(&g_sliceStart);
+    g_budget = budgetMs;
+    QD_loads = 0;
+    QD_CanLoad = CanLoad;
     void* pl = Player();
     void* srv = Srv();
     void* sp = pl && srv && fSrvCreature ? fSrvCreature(srv, Id(pl) & 0x7fffffffu) : nullptr;
@@ -739,41 +436,49 @@ void Step(double budgetMs) {
     if (!mod) { J.running = false; S.marks.clear(); S.offers.clear(); return; }
     if (!fDead) fDead = (int (*)(void*))GetProcAddress(GetModuleHandleA(nullptr), "?GetDead@CNWSObject@@QEAAHXZ");
     if (J.running && J.mod != mod) J.running = false;
-    if (!J.running) { Begin(srv, sp, mod); J.phase = 1; }
+    if (!J.running) { Begin(sp, mod); J.phase = 0; }
     int k = 0;
-    while (elapsed() < budgetMs || J.phase == 4) {
-        if (J.phase == 1) {                                   // every object of every area
+    while (SliceMs() < budgetMs || J.phase == 4) {
+        QD_pending = false;
+        if (J.phase == 0) {                                   // the module's scripts
+            if (!J.r.Module(ObjScripts(mod, 3))) return;
+            J.phase = 1;
+        } else if (J.phase == 1) {                            // every object of every area
             uint32_t* areas = F<uint32_t*>(mod, 0x50);
             int na = F<int>(mod, 0x58);
-            if (!areas || J.ai >= na || J.ai >= 1000) { J.phase = 5; continue; }
+            if (!areas || J.ai >= na || J.ai >= 1000) { J.phase = 6; continue; }
             void* ar = SrvArea(areas[J.ai]);
             if (!ar) { J.ai++; J.i = 0; continue; }
-            if (J.i == 0) { Target at{areas[J.ai], areas[J.ai], Vec3{}, true}; AddCalls(ObjScripts(ar, 4), &at); }
+            if (J.i == 0) { if (!J.r.Area(areas[J.ai], ObjScripts(ar, 4))) return; J.i = 1; }
             uint32_t* ids = F<uint32_t*>(ar, 0x228);
             int n = F<int>(ar, 0x230);
-            for (; ids && J.i < n && J.i < 20000; ) {
-                if (g_loads > 0) return;                     // a conversation / script was read this frame: the rest next frame
-                Object(areas[J.ai], ids[J.i++]);
-                if (elapsed() >= budgetMs) return;
+            for (; ids && J.i - 1 < n && J.i < 20001; ) {
+                QD_pending = false;
+                // a script / conversation still being worked out: that object again at the end
+                if (!Object(areas[J.ai], ids[J.i - 1])) J.later.push_back({areas[J.ai], ids[J.i - 1]});
+                J.i++;
+                if (SliceMs() >= budgetMs) return;
             }
             J.ai++; J.i = 0;
+        } else if (J.phase == 6) {                            // the objects that waited
+            if (J.li >= J.later.size()) {
+                if (J.later.empty()) { J.phase = 5; continue; }
+                J.later.erase(std::remove_if(J.later.begin(), J.later.end(), [](const std::pair<uint32_t, uint32_t>& x) { return x.first == 0; }), J.later.end());
+                J.li = 0;
+                if (J.later.empty()) { J.phase = 5; continue; }
+                return;                                       // the rest next slice (the worker is at it)
+            }
+            QD_pending = false;
+            auto& x = J.later[J.li++];
+            if (Object(x.first, x.second)) x.first = 0;       // done
+            if (SliceMs() >= budgetMs) return;
         } else if (J.phase == 5) {                            // what scripts create
-            if (J.ci >= J.created.size()) { J.phase = 2; continue; }
-            if (g_loads > 0) return;
-            Created(J.created[J.ci].first, J.created[J.ci].second);
-            J.ci++;
-            if (elapsed() >= budgetMs) return;
+            bool done = false;
+            J.r.Spawned(done);
+            if (done) J.phase = 2;
         } else if (J.phase == 2) {                            // tags -> objects
-            for (auto& g : J.goal) for (auto& tg : g.second) J.questsOf[tg].push_back(g.first);
-            for (auto& q : J.questsOf) {
-                auto bt = J.byTag.find(q.first);
-                if (bt != J.byTag.end()) for (auto& qq : q.second) J.objectives[qq].insert(J.objectives[qq].end(), bt->second.begin(), bt->second.end());
-            }
-            for (auto& sp : J.spawners) {
-                auto q = J.questsOf.find(sp.second);
-                if (q != J.questsOf.end()) for (auto& qq : q->second) J.objectives[qq].push_back(sp.first);
-            }
-            J.phase = J.questsOf.empty() ? 4 : 3;
+            J.r.Match();
+            J.phase = 3;
         } else if (J.phase == 3) {                            // items
             static auto fObjArray = (void* (*)(void*))GetProcAddress(GetModuleHandleA(nullptr), "?GetObjectArray@CServerExoApp@@QEAAPEAVCGameObjectArray@@XZ");
             void* oa = fObjArray ? fObjArray(srv) : nullptr;
@@ -781,7 +486,7 @@ void Step(double budgetMs) {
             uint32_t nb = oa ? F<uint32_t>(oa, 0x1c) : 0;
             if (!buckets || J.b >= nb || J.b >= (1u << 20)) { J.phase = 4; continue; }
             Bucket(srv, buckets[J.b++]);
-            if ((++k & 15) == 0 && elapsed() >= budgetMs) return;
+            if ((++k & 15) == 0 && SliceMs() >= budgetMs) return;
         } else {                                              // done
             Finish(srv, sp);
             J.running = false;
@@ -820,6 +525,13 @@ Vec3 LivePoint(const Mark& m) {
 
 void Quest_Init() {
     HMODULE exe = GetModuleHandleA(nullptr);
+    QD_Load = [](const char* r, uint16_t t, std::vector<uint8_t>& out) { return Res_Load(r, t, out); };
+    QD_Tlk = Tlk;
+    QD_Text = [](const char* s, int n) { return G2UClean(s, n); };
+    InitializeCriticalSection(&g_wq);
+    g_wev = CreateEventA(nullptr, FALSE, FALSE, nullptr);
+    HANDLE th = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
+    if (th) { SetThreadPriority(th, THREAD_PRIORITY_BELOW_NORMAL); CloseHandle(th); QD_RunAsync = RunAsync; }
     fSrvGameObject = (GetSrvObj_t)GetProcAddress(exe, "?GetGameObject@CServerExoApp@@QEAAPEAVCGameObject@@I@Z");
     fSrvCreature = (GetSrvObj_t)GetProcAddress(exe, "?GetCreatureByGameObjectID@CServerExoApp@@QEAAPEAVCNWSCreature@@I@Z");
 }
@@ -842,7 +554,7 @@ void Quest_Untrack() {
 }
 std::string Quest_Tracked() { Update(); return S.tag; }
 bool Quest_FollowChosen() { return !g_trackTag.empty(); }
-std::string Quest_Title(const std::string& tag) { auto it = g_title.find(Lower(tag)); return it != g_title.end() && !it->second.empty() ? it->second : tag; }
+std::string Quest_Title(const std::string& tag) { auto it = QD_quests.find(Lower(tag)); return it != QD_quests.end() && !it->second.title.empty() ? it->second.title : tag; }
 std::string Quest_Name() { return S.tag.empty() ? std::string() : Quest_Title(S.tag); }
 
 bool Quest_Marker(Vec3& point, bool& here) {

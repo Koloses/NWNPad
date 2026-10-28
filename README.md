@@ -92,13 +92,17 @@ healer's kit right away, anyone else gets a barter offer.
 area they are in; the quest's name is under the map. It follows the quest updated last unless you
 follow one: X on the hub Journal page or A on the hub Map page. The same button on the followed
 quest unfollows it: no marker until one of your quests gets a new journal entry. The game has no quest markers:
-the mod reads the module's scripts for what writes the quest's next journal entry. The objective comes
-first: the creature to kill, the item to get (where it lies, or whoever carries it - the troll chieftain
-with the troll's head), the place to reach; with several (e.g. werewolves) the nearest one. Once it's
-done (the item is in your pack, the creature dead) the marker points at whoever's conversation takes
-the quest on, as it does when a module's scripts don't reveal the objective. Something that creates the
-objective counts too (the cocoon a captured druid steps out of), and people whose conversation already
-moved the quest on (a druid you rescued) are left out while someone else can still move it.
+the mod works it out from the module's own scripts and conversations: for every journal entry still to
+come, who or what writes it and what that needs - the creature to kill, the item to get (where it lies,
+or whoever carries it - the troll chieftain with the troll's head), the place to reach, the lever or the
+person whose script sets what a later line waits for, whoever creates the target (the cocoon a captured
+druid steps out of), the teleport that leads there. The marker goes to what leads to the next entry, the
+nearest of them; someone who takes the quest on waits while what he needs is still out there (you don't
+carry it yet). The mod reads the module's and your character's script variables live, so steps already
+done drop out, and people whose conversation already moved the quest on are left out while someone else
+can still move it. Henchmen's status entries, and a tale your henchman will go on with later, show no
+marker. To check the rules without a save for every quest, `tools/qaudit` runs the same code over a
+module file and lists the targets of every quest at every journal entry.
 A gold "!" above someone (and on the minimap and the map) means their conversation can start a quest
 you don't have yet; the target frame names the quest. A grey "!" means its conversation first checks
 another quest you haven't got, so it may not be offered yet. Conversations can have other conditions
