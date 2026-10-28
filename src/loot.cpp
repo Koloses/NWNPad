@@ -30,7 +30,8 @@ struct LootState {
     bool active = false;
     uint32_t container = 0x7f000000;
     std::string name;
-    std::vector<InvItem> items;
+    std::vector<InvItem> items;     // the list shown: the container's, or your backpack
+    int side = 0;                   // 0 the container, 1 your backpack (to put things in)
     int sel = 0, scroll = 0;
     uint32_t selId = 0;
     double openTime = 0, lastGather = -10;
@@ -39,7 +40,11 @@ struct LootState {
 void Refresh(bool force = false) {
     if (!force && g_pad.now - LS.lastGather < 0.2) return;
     LS.lastGather = g_pad.now;
-    Inv::GatherContainer(Player(), LS.items);
+    if (LS.side == 0) Inv::GatherContainer(Player(), LS.items);
+    else {
+        static InvItem eq[ES_TOTAL];
+        Inv::Gather(Player(), LS.items, eq);
+    }
     int n = (int)LS.items.size();
     static int lastN = -1; static uint32_t lastC = 0;
     if (n != lastN || LS.container != lastC) {
@@ -77,7 +82,7 @@ bool Loot_Active() {
         LS.active = true;
         LS.container = c;
         LS.name = GD::ObjName(c);
-        LS.sel = 0; LS.scroll = 0; LS.selId = 0;
+        LS.sel = 0; LS.scroll = 0; LS.selId = 0; LS.side = 0;
         LS.openTime = g_pad.now;
         LS.lastGather = -10;
         Hub_Close();
@@ -101,24 +106,31 @@ bool Loot_Input() {
     if (!Loot_Active()) return false;
     HidePanel();
     Refresh();
+    // left / right: the container or your backpack
+    if (g_pad.Pressed(PB_DLEFT) || g_pad.Pressed(PB_DRIGHT) || g_pad.Pressed(PB_LLEFT) || g_pad.Pressed(PB_LRIGHT)) {
+        LS.side ^= 1; LS.sel = 0; LS.scroll = 0; LS.selId = 0;
+        Refresh(true);
+        Log("loot: showing %s", LS.side ? "backpack" : "container");
+    }
     int n = (int)LS.items.size();
     if (n > 0) {
         if (g_pad.Repeat(PB_DUP) || g_pad.Repeat(PB_LUP)) LS.sel = (LS.sel + n - 1) % n;
         if (g_pad.Repeat(PB_DDOWN) || g_pad.Repeat(PB_LDOWN)) LS.sel = (LS.sel + 1) % n;
         LS.selId = LS.items[LS.sel].id;
         if (g_pad.Pressed(PB_A)) {
-            Inv::TakeItem(LS.items[LS.sel].id);
+            if (LS.side == 0) Inv::TakeItem(LS.items[LS.sel].id);
+            else Inv::PutItem(LS.items[LS.sel].id);
             LS.selId = LS.sel + 1 < n ? LS.items[LS.sel + 1].id : (LS.sel > 0 ? LS.items[LS.sel - 1].id : 0);
             LS.lastGather = g_pad.now - 0.1;
         }
         if (g_pad.Pressed(PB_X)) Inv::Examine(Player(), LS.items[LS.sel].id);
     }
-    if (g_pad.Pressed(PB_Y)) {
+    if (g_pad.Pressed(PB_Y) && LS.side == 0) {
         for (auto& it : LS.items) Inv::TakeItem(it.id);
         LS.lastGather = g_pad.now - 0.1;
     }
-    if (g_pad.Pressed(PB_RB)) { Inv::ContainerPage(1); LS.lastGather = g_pad.now - 0.1; }
-    if (g_pad.Pressed(PB_LB)) { Inv::ContainerPage(-1); LS.lastGather = g_pad.now - 0.1; }
+    if (LS.side == 0 && g_pad.Pressed(PB_RB)) { Inv::ContainerPage(1); LS.lastGather = g_pad.now - 0.1; }
+    if (LS.side == 0 && g_pad.Pressed(PB_LB)) { Inv::ContainerPage(-1); LS.lastGather = g_pad.now - 0.1; }
     if (g_pad.Pressed(PB_B) || g_pad.Pressed(PB_START)) Inv::CloseContainer();
     return true;
 }
@@ -143,7 +155,14 @@ void Loot_Draw() {
     float x = (W() - w) * 0.5f, y = (H() - h) * 0.5f - px(30) + (1 - a) * px(20);
     UIK::Panel(x, y, w, h, px(18), a);
     // header: container name + count
-    Text(FONT_TITLE, px(30), x + px(30), y + px(22), LS.name.empty() ? "Container" : LS.name.c_str(), Theme::Gold.alpha(a));
+    // tabs: the container / your backpack
+    {
+        std::string c = LS.name.empty() ? "Container" : LS.name;
+        float tx = x + px(30);
+        Text(FONT_TITLE, px(30), tx, y + px(22), c.c_str(), LS.side == 0 ? Theme::Gold.alpha(a) : Theme::TextFaint.alpha(a));
+        tx += TextWidth(FONT_TITLE, px(30), c.c_str()) + px(28);
+        Text(FONT_TITLE, px(30), tx, y + px(22), "Your pack", LS.side == 1 ? Theme::Gold.alpha(a) : Theme::TextFaint.alpha(a));
+    }
     char cnt[32]; snprintf(cnt, sizeof cnt, n == 1 ? "%d item" : "%d items", n);
     TextRight(FONT_BODY, px(20), x + lw - px(30), y + px(30), cnt, Theme::TextFaint.alpha(a));
     RoundRect(x + px(24), y + px(72), lw - px(48), px(1), 0, Theme::Line.alpha(0.5f * a));
@@ -165,21 +184,22 @@ void Loot_Draw() {
         TextFit(FONT_BODY, px(17), tx, ry + px(37), lw - (tx - x) - px(120), it.typeName.c_str(), Theme::TextFaint.alpha(a));
         if (it.stack > 1) { char b[16]; snprintf(b, sizeof b, "x%d", it.stack); TextRight(FONT_BODY_BOLD, px(22), x + lw - px(40), ry + px(20), b, Theme::GoldDim.alpha(a)); }
     }
-    if (n == 0) TextCentered(FONT_BODY, px(22), x + w * 0.5f, ly + px(20), "Empty", Theme::TextFaint.alpha(a));
+    if (n == 0) TextCentered(FONT_BODY, px(22), x + w * 0.5f, ly + px(20), LS.side ? "Nothing to put in" : "Empty", Theme::TextFaint.alpha(a));
     PopClip();
     UIK::Scrollbar(x + lw - px(14), ly + px(4), vis * rowH - px(8), LS.scroll, vis, n);
     if (n > 0 && LS.sel < n) {
         static ItemDetailsState ds;
         UI_ItemDetails(LS.items[LS.sel], x + lw, y + px(20), dw - px(20), h - px(40), a, ds);
     }
-    HintItem hints[6]; int hn = 0;
+    HintItem hints[7]; int hn = 0;
     if (n > 0) {
         hints[hn++] = {GL_DPAD, "Choose"};
-        hints[hn++] = {GL_A, "Take"};
-        hints[hn++] = {GL_Y, "Take all"};
+        hints[hn++] = {GL_A, LS.side ? "Put in" : "Take"};
+        if (!LS.side) hints[hn++] = {GL_Y, "Take all"};
         hints[hn++] = {GL_X, "Examine"};
         hints[hn++] = {GL_RS, "Scroll"};
     }
+    hints[hn++] = {GL_DRIGHT, LS.side ? "Container" : "Your pack"};
     hints[hn++] = {GL_B, "Close"};
     UI_DrawHints(hints, hn, a);
 }

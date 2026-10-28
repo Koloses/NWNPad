@@ -388,7 +388,9 @@ void GatherContainer(void* cre, std::vector<InvItem>& out) {
     uint32_t cid = Id(cre);
     ForEachItem([&](void* it) {
         if (F<int>(it, IT_InContainer) != 1) return;
-        if (F<uint32_t>(it, IT_Possessor) != cid) return;
+        // (one you put in is left with no possessor)
+        uint32_t pos = F<uint32_t>(it, IT_Possessor);
+        if (pos != cid && pos != 0x7f000000) return;
         if (g_takenGold.count(F<uint32_t>(it, IT_Id))) return;
         auto ic = g_itemContainer.find(F<uint32_t>(it, IT_Id));
         if (o_ItemAdd && (ic == g_itemContainer.end() || ic->second != OpenContainerId())) return;   // shown in another container
@@ -413,6 +415,16 @@ void TakeItem(uint32_t id) {
     if (void* it = ItemById(id)) if (F<int>(it, IT_BaseItem) == 76) g_takenGold.insert(id);
     typedef void (*fn)(void*, uint32_t, uint8_t, uint8_t, uint32_t);
     ((fn)A(VA_Msg_RepositoryMove))(m, id, 0xff, 0xff, 0x7f000000);
+}
+
+void PutItem(uint32_t id) {
+    void* m = Msg();
+    uint32_t c = OpenContainerId();
+    if (!m || c == 0x7f000000) return;
+    Log("put %08x into container %08x", id, c);
+    g_itemContainer[id] = c;
+    typedef void (*fn)(void*, uint32_t, uint8_t, uint8_t, uint32_t);
+    ((fn)A(VA_Msg_RepositoryMove))(m, id, 0xff, 0xff, c);
 }
 
 void CloseContainer() {

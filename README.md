@@ -187,7 +187,9 @@ is shown next to the text.
 ### Loot (chests, corpses, bags)
 
 D-pad choose, A takes the item, Y takes everything, X examines, LB / RB change the page,
-B closes. The selected item's description is shown on the right.
+B closes. The selected item's description is shown on the right. D-pad left / right switches to
+your backpack: A there puts the item into the container (quests that want something placed in a
+chest or on an altar).
 
 ### Merchants
 

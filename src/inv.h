@@ -72,6 +72,7 @@ uint32_t OpenContainerId();                 // 0x7f000000 if none
 void InstallHooks();                      // container contents tracking
 void GatherContainer(void* creature, std::vector<InvItem>& out);
 void TakeItem(uint32_t itemId);
+void PutItem(uint32_t itemId);              // from the backpack into the open container
 void CloseContainer();
 void ContainerPage(int dir);
 // icons
