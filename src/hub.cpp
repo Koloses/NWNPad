@@ -60,6 +60,7 @@ struct HubState {
     std::vector<Inv::SkillInfo> skills; std::vector<Inv::FeatInfo> feats;
     int qbBank = 0, qbSlot = 0;
     uint32_t qbPlace = 0; std::string qbPlaceName;   // item waiting for a quick slot
+    int qbPlacePower = -1;                             // its power to use from the slot (-1: the item's own use)
     uint32_t descId = 0; float descScroll = 0;
     int sortMode = 0;            // 0 backpack order, 1 name, 2 type, 3 value, 4 weight
     bool grid = true;            // backpack as a grid of item footprints (like the original) or a list
@@ -234,9 +235,15 @@ void MoveGrid(int dr, int dc) {
 }
 
 // ---- item actions ----------------------------------------------------------------------------
-enum ItemAct { IA_EQUIP, IA_USE, IA_SPLIT, IA_MERGE, IA_OPEN, IA_TOBAG, IA_DROP, IA_EXAMINE, IA_MORE, IA_GIVE, IA_QUICK };
-const char* ActName(int a) {
+enum ItemAct { IA_EQUIP, IA_USE, IA_SPLIT, IA_MERGE, IA_OPEN, IA_TOBAG, IA_DROP, IA_EXAMINE, IA_MORE, IA_GIVE, IA_QUICK,
+               IA_POWER = 100 };   // + index: one of the item's powers
+std::string ActName(int a) {
     static const char* N[] = {"Equip", "Use", "Split stack", "Combine stacks", "Open", "Put in a bag", "Drop", "Examine", "More actions", "Give to ...", "Put on quickbar"};
+    if (a >= IA_POWER) {
+        auto p = Inv::Powers(HS.actItem);
+        int i = a - IA_POWER;
+        return "Use: " + (i < (int)p.size() ? p[i] : std::string("power"));
+    }
     return N[a];
 }
 const InvItem* FindPack(uint32_t id) {
@@ -254,10 +261,19 @@ void OpenActions(const InvItem& it) {
     void* pl = Player();
     HS.acts.clear();
     HS.actItem = it.id;
+    // the item's powers (a ring's spell, a wand, a kit): one entry each; potions and other items that are
+    // only used keep the one "Use". Worn items' powers work only while they are worn (the game's rule).
+    bool wearable = Inv::BestSlot(pl, it) >= 0 || it.equippedSlot >= 0;
+    bool canUse = it.identified && !Inv::IsContainer(it) && (!wearable || it.equippedSlot >= 0);
+    auto powers = canUse ? Inv::Powers(it.id) : std::vector<std::string>();
+    bool perPower = !powers.empty() && (wearable || powers.size() > 1);
     if (it.equippedSlot < 0) {
         if (Inv::BestSlot(pl, it) >= 0) HS.acts.push_back(IA_EQUIP);
         if (Inv::IsContainer(it)) HS.acts.push_back(IA_OPEN);
-        else if (Inv::BestSlot(pl, it) < 0) HS.acts.push_back(IA_USE);
+        else if (!wearable && !perPower) HS.acts.push_back(IA_USE);
+    }
+    if (perPower) for (int i = 0; i < (int)powers.size(); i++) HS.acts.push_back(IA_POWER + i);
+    if (it.equippedSlot < 0) {
         if (it.stack > 1) HS.acts.push_back(IA_SPLIT);
         if (!SameStacks(it).empty()) HS.acts.push_back(IA_MERGE);
         if (!Inv::IsContainer(it)) for (auto& o : HS.pack) if (Inv::IsContainer(o)) { HS.acts.push_back(IA_TOBAG); break; }
@@ -297,7 +313,13 @@ void DoAction(int a) {
     case IA_EXAMINE: Inv::Examine(pl, c.id); break;
     case IA_GIVE: Hub_Close(); Control_StartGive(c.id, c.name.c_str()); return;
     case IA_MORE: CenterMouse(); Inv::OpenRadial(c.id); break;
-    case IA_QUICK: HS.qbPlace = c.id; HS.qbPlaceName = c.name; SwitchTab(2); return;
+    case IA_QUICK:
+        // a worn item with one power (a ring's spell): the slot uses the power, as dragging it from the item wheel
+        HS.qbPlace = c.id; HS.qbPlaceName = c.name;
+        HS.qbPlacePower = c.identified && c.equipMask && Inv::Powers(c.id).size() == 1 ? 0 : -1;
+        SwitchTab(2); return;
+    default:
+        if (a >= IA_POWER) { Hub_Close(); Inv::UsePower(c.id, a - IA_POWER); return; }
     }
     HS.lastGather = g_pad.now - 0.15;
     Inv::RescanPages();
@@ -492,7 +514,7 @@ void QuickbarInput() {
         if (g_pad.Pressed(PB_A)) {
             uint32_t id = HS.qbPlace; HS.qbPlace = 0;
             static const char* setN[3] = {"I", "II", "III"};
-            if (QB_SetItem(HS.qbBank, HS.qbSlot, id)) Toast(HS.qbPlaceName + " on set " + setN[HS.qbBank] + ", slot " + std::to_string(HS.qbSlot + 1));
+            if (QB_SetItem(HS.qbBank, HS.qbSlot, id, HS.qbPlacePower)) Toast(HS.qbPlaceName + " on set " + setN[HS.qbBank] + ", slot " + std::to_string(HS.qbSlot + 1));
             else Toast(HS.qbPlaceName + " can't go on the quickbar");
             SwitchTab(0);
         } else if (g_pad.Pressed(PB_B)) { HS.qbPlace = 0; SwitchTab(0); }
@@ -1213,7 +1235,8 @@ void Hub_DevQuick(int slot, const char* want) {
     for (auto& it : pack) {
         std::string l = it.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
         if (l.find(want) == std::string::npos) continue;
-        Log("dev: qbitem %d %08x '%s' -> %d", slot, it.id, it.name.c_str(), QB_SetItem(g_ctl.quickBank, slot, it.id));
+        int pw = it.identified && it.equipMask && Inv::Powers(it.id).size() == 1 ? 0 : -1;
+        Log("dev: qbitem %d %08x '%s' -> %d", slot, it.id, it.name.c_str(), QB_SetItem(g_ctl.quickBank, slot, it.id, pw));
         return;
     }
     Log("dev: no item matching '%s'", want);
@@ -1221,6 +1244,14 @@ void Hub_DevQuick(int slot, const char* want) {
 
 // developer: select the backpack item whose name contains the text (any page)
 void Hub_DevSelect(const char* want) {
+    for (auto& e : HS.eq) {
+        if (!e.item) continue;
+        std::string l = e.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
+        if (l.find(want) == std::string::npos) continue;
+        Log("dev: select equipped %08x '%s'", e.id, e.name.c_str());
+        OpenActions(e);
+        return;
+    }
     for (auto& it : HS.pack) {
         std::string l = it.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
         if (l.find(want) == std::string::npos) continue;

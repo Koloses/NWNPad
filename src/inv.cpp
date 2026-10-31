@@ -521,6 +521,17 @@ void Drop(void* cre, uint32_t id) {
 // "Use" without the radial menu: potions are drunk straight away, other items with one usable property
 // (wands, scrolls, kits, rods) start the game's item target mode, as clicking the property in the radial does
 int ActiveProperties(void* item) { return item && Readable((char*)item + 0x1f4, 12) ? F<int>(item, 0x1f4) : 0; }
+void UsePower(uint32_t id, int index) {
+    typedef void* (*fnew)(size_t);
+    typedef void* (*fctor)(void*);
+    typedef void (*fact)(void*, uint32_t, uint64_t, char*);
+    void* t = ((fnew)A(0x140c0e364))(0x168);                  // CNWCActionTarget (item property)
+    if (!t) return;
+    t = ((fctor)A(0x140700e60))(t);
+    char resref[32] = {};
+    Log("use %08x power %d: item target mode", id, index);
+    ((fact)A(0x140701060))(t, id, (uint64_t)index, resref);
+}
 bool UseItem(void* cre, uint32_t id) {
     void* it = ItemById(id);
     if (!cre || !it) return false;
@@ -534,16 +545,30 @@ bool UseItem(void* cre, uint32_t id) {
         ((fn)A(0x140804240))(cre, id, 0u | (0xffu << 16), Id(cre), pos);
         return true;
     }
-    typedef void* (*fnew)(size_t);
-    typedef void* (*fctor)(void*);
-    typedef void (*fact)(void*, uint32_t, uint64_t, char*);
-    void* t = ((fnew)A(0x140c0e364))(0x168);
-    if (!t) return false;
-    t = ((fctor)A(0x140700e60))(t);
-    char resref[32] = {};
-    Log("use %08x: item target mode", id);
-    ((fact)A(0x140701060))(t, id, 0, resref);
+    UsePower(id, 0);
     return true;
+}
+
+// active properties: CNWItemProperty[ +0x1f4 count, +0x1f8 array ], 0x30 each: +0 property (itempropdef.2da),
+// +2 subtype (cast spell: iprp_spells.2da)
+std::vector<std::string> Powers(uint32_t id) {
+    std::vector<std::string> v;
+    void* it = ItemById(id);
+    int n = ActiveProperties(it);
+    const uint8_t* a = n > 0 ? F<const uint8_t*>(it, 0x1f8) : nullptr;
+    if (!a || !Readable(a, n * 0x30)) return v;
+    for (int i = 0; i < n; i++) {
+        int prop = F<uint16_t>(a + i * 0x30, 0), sub = F<uint16_t>(a + i * 0x30, 2);
+        std::string name;
+        if (prop == 15) name = Tlk((uint32_t)TDA("iprp_spells").Int(sub, "Name", 0));          // cast spell
+        if (name.empty()) {
+            const TwoDA& d = TDA("itempropdef");
+            name = Tlk((uint32_t)d.Int(prop, "GameStrRef", d.Int(prop, "Name", 0)));
+        }
+        if (name.empty()) name = "Power " + std::to_string(i + 1);
+        v.push_back(name);
+    }
+    return v;
 }
 
 void OpenRadial(uint32_t id) {

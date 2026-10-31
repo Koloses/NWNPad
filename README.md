@@ -123,8 +123,11 @@ where NWNPad itself takes more than 8 ms are written to NWNPad.log ("prof:"); `P
 reaches them.
 
 **Using items from the inventory:** Use (X > Use) drinks a potion straight away. Wands, scrolls,
-kits and other items with one power go to target mode; items with several powers open the
-game's item wheel.
+kits and other items with one power go to target mode. Items with powers - a worn ring's or amulet's
+spell, a rod's several powers - list each one in the item menu ("Use: Invisibility"); worn items'
+powers work while they are worn (the game's rule). "Put on quickbar" on a worn item with one power puts
+that power on the slot. A helpful spell from an item (invisibility, haste ...) goes on yourself when
+the target in front of you is a chest or door rather than a creature.
 
 ### Hub (Start)
 

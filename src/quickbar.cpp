@@ -186,12 +186,13 @@ bool QB_DrawItem(int bank, int slot, float x, float y, float size, float a, bool
     return true;
 }
 
-bool QB_SetItem(int bank, int slot, uint32_t itemId) {
+bool QB_SetItem(int bank, int slot, uint32_t itemId, int power) {
     void* b = Control_QuickButton(bank, slot);
     if (!b) return false;
     typedef void (*fn)(void*, uint32_t, int, int);
-    ((fn)A(0x1408661c0))(b, itemId, 0xff00ff, 0);        // CGuiQuickButton::SetButtonItem (no property: the item's own use)
-    Log("quickbar bank %d slot %d item %08x -> type %d", bank, slot, itemId, F<uint8_t>(b, QB_Type));
+    // CGuiQuickButton::SetButtonItem: low byte the active property (0xff: the item's own use), byte 2 its sub-entry
+    ((fn)A(0x1408661c0))(b, itemId, 0xff0000 | (power >= 0 && power < 0xff ? power : 0xff), 0);
+    Log("quickbar bank %d slot %d item %08x power %d -> type %d", bank, slot, itemId, power, F<uint8_t>(b, QB_Type));
     return F<uint8_t>(b, QB_Type) != 0;
 }
 

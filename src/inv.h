@@ -56,6 +56,10 @@ void SetCharSheetOpen(void* creature, bool open);
 bool PagesComplete();
 void RescanPages();                       // walk the pages again soon (after taking things out)                     // every page has been brought in since the inventory opened
 bool UseItem(void* creature, uint32_t id);   // false: use the radial menu instead
+// the item's powers (rings, amulets, wands ...: cast spell, unique power, kits): their names, and using one
+// (target mode, as picking it in the game's item wheel)
+std::vector<std::string> Powers(uint32_t id);
+void UsePower(uint32_t id, int index);
 void OpenRadial(uint32_t itemId);
 void Split(uint32_t itemId, int count);                     // new stack of `count` split off
 void Merge(uint32_t intoId, uint32_t fromId);               // combine two stacks of the same item

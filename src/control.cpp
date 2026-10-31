@@ -412,36 +412,71 @@ static void RadialControl(void* radial) {
     if (g_pad.Pressed(PB_Y)) GuiKey(0x33, 1);     // centre = back to parent menu
 }
 
+// what an item power in target mode may be used on: spells.2da TargetType of the spell it casts
+// (1 self, 2 creature, 4 ground, 8 item, 0x10 door, 0x20 placeable, 0x40 trigger); -1 not known (spells
+// from the spellbook, other powers). The item property mode is the one with its handler at +0xf8.
+static int ActionTargetMask(void* at) {
+    if (!at || F<uintptr_t>(at, 0xf8) != A(0x140701020)) return -1;
+    void* it = Inv::ItemById(F<uint32_t>(at, 0x150));
+    int idx = F<uint8_t>(at, 0x154);                            // low byte: the property (byte 2: its sub-entry)
+    int n = it ? F<int>(it, 0x1f4) : 0;
+    if (idx < 0 || idx >= n) return -1;
+    const uint8_t* p = F<const uint8_t*>(it, 0x1f8) + idx * 0x30;
+    if (F<uint16_t>(p, 0) != 15) return -1;                      // cast spell
+    int spell = TDA("iprp_spells").Int(F<uint16_t>(p, 2), "SpellIndex", -1);
+    const std::string& t = TDA("spells").Get(spell, "TargetType");
+    if (t.empty()) return -1;
+    int mask = (int)strtol(t.c_str(), nullptr, 0);
+    // a helpful spell that can go on a creature (invisibility, haste, cure ...) is meant for one, not for the
+    // chest or door that happens to be the target
+    if (TDA("spells").Int(spell, "HostileSetting", 0) == 0 && (mask & 3)) mask &= ~(0x10 | 0x20 | 0x40);
+    return mask;
+}
+static bool TargetFits(int mask, void* obj) {
+    if (mask < 0 || !obj) return true;
+    switch (Type(obj)) {
+    case 5: return (mask & 0x02) != 0;
+    case 6: return (mask & 0x08) != 0;
+    case 7: return (mask & 0x40) != 0;
+    case 9: return (mask & 0x20) != 0;
+    case 10: return (mask & 0x10) != 0;
+    }
+    return true;
+}
+
 static void ActionTargetControl(void* player, void* at) {
-    // used from a quick slot with a target selected: straight at that target
-    if (g_pad.now - g_quickSlotTime < 0.6 && g_ctl.softTarget && g_ctl.softTarget != Id(player)) {
-        g_quickSlotTime = -10;
-        if (void* obj = GetObj(g_ctl.softTarget)) {
+    typedef void (*fn)(void*);
+    auto On = [&](void* obj, Vec3 p, int kind) { WithHitOverride(obj, p, kind, [&] { ((fn)A(VA_ActionTarget_LMouseDown))(at); }); };
+    int mask = ActionTargetMask(at);
+    // used from a quick slot with a target selected: straight at that target, or on yourself when the
+    // power can't go on it (a ring of invisibility with a chest in front of you)
+    if (g_pad.now - g_quickSlotTime < 0.6) {
+        void* obj = g_ctl.softTarget && g_ctl.softTarget != Id(player) ? GetObj(g_ctl.softTarget) : nullptr;
+        if (obj && TargetFits(mask, obj)) {
+            g_quickSlotTime = -10;
             Log("quick slot on current target %08x", Id(obj));
-            WithHitOverride(obj, Pos(obj), 2, [&] {
-                typedef void (*fn)(void*);
-                ((fn)A(VA_ActionTarget_LMouseDown))(at);
-            });
+            On(obj, Pos(obj), 2);
+            return;
+        }
+        if (mask >= 0 && (mask & 1)) {
+            g_quickSlotTime = -10;
+            Log("quick slot on yourself (targets %#x)", mask);
+            On(player, Pos(player), 2);
             return;
         }
     }
     // choose target: soft target, or ground point ahead of the hero
     if (g_pad.Pressed(PB_A)) {
         void* obj = g_ctl.softTarget ? GetObj(g_ctl.softTarget) : nullptr;
+        if (!TargetFits(mask, obj)) obj = nullptr;
+        if (!obj && mask >= 0 && !(mask & 4) && (mask & 1)) { Log("action target on yourself (targets %#x)", mask); On(player, Pos(player), 2); return; }
         Vec3 p = obj ? Pos(obj) : (g_ctl.pauseCursor && g_curWorldOk) ? g_curWorld : GroundPointAhead(player, 4.0f);
         Log("action target confirm obj=%08x", obj ? Id(obj) : 0);
-        WithHitOverride(obj, p, obj ? 2 : 1, [&] {
-            typedef void (*fn)(void*);
-            ((fn)A(VA_ActionTarget_LMouseDown))(at);
-        });
+        On(obj, p, obj ? 2 : 1);
     } else if (g_pad.Pressed(PB_B)) {
         GuiKey(0x12, 1);
     } else if (g_pad.Pressed(PB_Y)) {
-        // target self
-        WithHitOverride(player, Pos(player), 2, [&] {
-            typedef void (*fn)(void*);
-            ((fn)A(VA_ActionTarget_LMouseDown))(at);
-        });
+        On(player, Pos(player), 2);                               // target self
     }
 }
 
@@ -717,6 +752,28 @@ static void DevCommands(void* player) {
         bool eq = line[0] == 'e';
         std::string want = line + (eq ? 6 : 5); for (auto& c : want) c = (char)tolower((unsigned char)c);
         void Hub_DevUse(const char*, bool); Hub_DevUse(want.c_str(), eq);
+        return;
+    }
+    if (strncmp(line, "props ", 6) == 0) {    // props <hex id>: the item's active properties, raw (tests)
+        void* it = Inv::ItemById((uint32_t)strtoul(line + 6, nullptr, 16));
+        int n = it ? F<int>(it, 0x1f4) : 0;
+        for (int i = 0; i < n; i++) {
+            const uint8_t* p = F<const uint8_t*>(it, 0x1f8) + i * 0x30;
+            std::string h; char b[8]; for (int k = 0; k < 0x30; k++) { snprintf(b, sizeof b, "%02x ", p[k]); h += b; }
+            Log("dev: prop %d: %s", i, h.c_str());
+        }
+        return;
+    }
+    if (strncmp(line, "ident ", 6) == 0) {    // ident <hex id>: the server identifies the item (tests)
+        HMODULE exe = GetModuleHandleA(nullptr);
+        static void** am = (void**)GetProcAddress(exe, "?g_pAppManager@@3PEAVCAppManager@@EA");
+        static auto fItem = (void* (*)(void*, uint32_t))GetProcAddress(exe, "?GetItemByGameObjectID@CServerExoApp@@QEAAPEAVCNWSItem@@I@Z");
+        static auto fSet = (void (*)(void*, int))GetProcAddress(exe, "?SetIdentified@CNWSItem@@QEAAXH@Z");
+        void* srv = am && *am ? F<void*>(*am, 8) : nullptr;
+        uint32_t id = (uint32_t)strtoul(line + 6, nullptr, 16) & 0x7fffffffu;
+        void* si = srv && fItem ? fItem(srv, id) : nullptr;
+        Log("dev: ident %08x -> %p", id, si);
+        if (si && fSet) fSet(si, 1);
         return;
     }
     if (strncmp(line, "itemdump ", 9) == 0) {  // itemdump <hex id>: raw fields of a client item (tests)
