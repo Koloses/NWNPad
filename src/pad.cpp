@@ -49,22 +49,6 @@ static void radialDeadzone(float& x, float& y, float dz) {
     x = x / m * n; y = y / m * n;
 }
 
-// Test injection (developer): file with "buttons lx ly rx ry lt rt" (hex buttons, floats) read every frame
-static bool readInject(XGP& gp) {
-    if (!g_cfg.injectFile[0]) return false;
-    FILE* f = fopen(g_cfg.injectFile, "r");
-    if (!f) return false;
-    unsigned b = 0; float lx = 0, ly = 0, rx = 0, ry = 0, lt = 0, rt = 0;
-    int n = fscanf(f, "%x %f %f %f %f %f %f", &b, &lx, &ly, &rx, &ry, &lt, &rt);
-    fclose(f);
-    if (n < 1) return false;
-    gp.wButtons = (WORD)b;
-    gp.sThumbLX = (SHORT)(lx * 32767); gp.sThumbLY = (SHORT)(ly * 32767);
-    gp.sThumbRX = (SHORT)(rx * 32767); gp.sThumbRY = (SHORT)(ry * 32767);
-    gp.bLeftTrigger = (BYTE)(lt * 255); gp.bRightTrigger = (BYTE)(rt * 255);
-    return true;
-}
-
 void Pad_Update() {
     LARGE_INTEGER t; QueryPerformanceCounter(&t);
     double now = double(t.QuadPart - g_t0.QuadPart) / double(g_freq.QuadPart);
@@ -73,8 +57,8 @@ void Pad_Update() {
     g_pad.now = now;
 
     XGP gp = {};
-    bool ok = readInject(gp);
-    if (!ok && pGetState) {
+    bool ok = false;
+    if (pGetState) {
         XST st;
         if (g_userIndex >= 0 && pGetState(g_userIndex, &st) == 0) { gp = st.Gamepad; ok = true; }
         else {

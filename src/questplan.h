@@ -1,5 +1,5 @@
 // NWNPad - one round of working out where each active quest goes on: who and what moves it on, and which
-// entry each of them leads to. Game independent: the game (questmark.cpp) and the offline audit tool feed it
+// entry each of them leads to. Game independent: the game (questmark.cpp) feeds it
 // the objects of the module.
 #pragma once
 #include "questdata.h"
@@ -19,10 +19,8 @@ struct Target {
     std::string needs;                  // " "-separated: what its line / script needs (it waits for whoever has it)
     const char* why = "";               // (for the logs)
 };
-// a local int of the module ("m:name") or the player ("p:name"); false: not known (the offline audit)
+// a local int of the module ("m:name") or the player ("p:name"); false: not known
 extern bool (*LocalInt)(const std::string& key, int& value);
-// (audit) told where each tag a quest waits for comes from
-extern void (*Trace)(const std::string& quest, const std::string& tag, uint32_t entry, const std::string& from);
 struct Edge { uint32_t from, to; P3 at; uint32_t obj; };
 struct Offer { uint32_t id, area; P3 pos; bool maybe; std::vector<std::string> quests; };
 struct Obj {                            // an object of the module (5 creature, 7 trigger, 9 placeable, 10 door, 12 waypoint)

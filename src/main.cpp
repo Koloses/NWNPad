@@ -8,7 +8,6 @@
 #include "pad.h"
 #include "control.h"
 #include "ui.h"
-#include "gldiag.h"
 
 void Proxy_Load();
 static char g_dir[MAX_PATH];
@@ -27,8 +26,7 @@ static void Init() {
     Log("NWNPad 1.0 (built " __DATE__ " " __TIME__ ") starting (%s), module base %p", exe, (void*)GetModuleHandleA("version.dll"));
     snprintf(path, sizeof path, "%s\\NWNPad.ini", g_dir);
     Config_Load(path);
-    GLDiag_Init(g_dir);
-    if (!g_cfg.enabled) { Log("disabled in ini"); GLDiag_HookSwap(); return; }
+    if (!g_cfg.enabled) { Log("disabled in ini"); return; }
     if (!G::Init()) { Log("game globals not found - unsupported build"); return; }
     Pad_Init();
     Control_Init();

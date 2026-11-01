@@ -1,5 +1,4 @@
 #include "hooks.h"
-#include "prof.h"
 #include "netfix.h"
 #include "game.h"
 #include "log.h"
@@ -28,9 +27,9 @@ void* Hook_Create(uintptr_t va, void* detour, const char* name) {
 }
 
 static void hk_ProcessInput(void* in) {
-    { ProfScope ps(PS_PREINPUT); Control_PreInput(in); }
+    Control_PreInput(in);
     o_ProcessInput(in);
-    { ProfScope ps(PS_POSTINPUT); Control_PostInput(in); }
+    Control_PostInput(in);
 }
 static void hk_UpdateDriveMode(void* in) {
     Control_Drive(in, o_UpdateDriveMode);

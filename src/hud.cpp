@@ -17,7 +17,6 @@
 #include <deque>
 #include <string>
 #include "questmark.h"
-#include "prof.h"
 #include <cmath>
 #include <cstring>
 
@@ -109,7 +108,6 @@ void LogGameHud() {
     for (int off = 8; off <= 0x3c0; off += 8) {
         void* p = F<void*>(gig, off);
         const char* cn = p ? ClassName(p) : "";
-        if (cn[0] && g_cfg.devDumpArea) Log("GIG+0x%03x %s flags=%x", off, cn, F<uint32_t>(p, 0xb0));
     }
 }
 
@@ -413,7 +411,6 @@ static void DrawFeed() {
 
 void HUD_Draw() {
     if (!g_cfg.newHud) return;
-    ProfScope ps(PS_HUD);
     void* pl = Player();
     if (!pl) return;
     DrawHero(pl);
@@ -421,7 +418,7 @@ void HUD_Draw() {
     DrawTarget(pl);
     DrawActions();
     DrawFeed();
-    if (g_cfg.minimap) { ProfScope ps(PS_MAP); float ms = px(230); Map_DrawMinimap(W() - px(40) - ms, px(40), ms, 0.95f); }
+    if (g_cfg.minimap) { float ms = px(230); Map_DrawMinimap(W() - px(40) - ms, px(40), ms, 0.95f); }
     if (GD::IsPaused()) {
         float w = px(560), h = px(52);
         float y = px(136);

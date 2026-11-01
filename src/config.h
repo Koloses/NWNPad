@@ -6,7 +6,6 @@ struct Config {
     int questMarker = 1;       // quest marker on the minimap (single player)
     int inventoryGrid = 1;     // hub backpack starts as a grid (0 = list)
     int showFps = 0;           // frame rate counter in the top-left corner
-    int profile = 0;           // [Debug] Profile: log our time per frame every 10 s
     int newDialog = 1;         // gamepad dialogue window
     int newMenus = 1;          // gamepad hub (inventory, character, journal...)
     float deadzoneL = 0.24f, deadzoneR = 0.20f;
@@ -18,9 +17,6 @@ struct Config {
     float uiScale = 0.0f;      // 0 = auto
     int codepage = 0;          // 0 = auto (from game language)
     int hideCursorWithPad = 1;
-    char injectFile[260] = ""; // developer: virtual pad input file
-    int devDumpArea = 0;       // developer: log area objects when the hub opens
-    int glDiag = 0;            // developer: OpenGL diagnostics and frame capture (gldiag.cpp)
 };
 extern Config g_cfg;
 void Config_Load(const char* iniPath);

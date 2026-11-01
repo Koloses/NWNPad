@@ -65,7 +65,6 @@ bool Round::GuardsOk(const std::vector<NcsFlow::Guard>& gs, bool locals) const {
 }
 
 bool (*LocalInt)(const std::string&, int&) = nullptr;
-void (*Trace)(const std::string&, const std::string&, uint32_t, const std::string&) = nullptr;
 
 void Round::Goal(const std::string& q, const std::string& tag, const std::string& owner, uint32_t entry, const std::string& from) {
     if (tag.compare(0, 16, "nw_journal_entry") == 0) return;
@@ -79,7 +78,6 @@ void Round::Goal(const std::string& q, const std::string& tag, const std::string
         auto& g = goal[q];
         auto it = g.find(t);
         if (it == g.end() || entry < it->second) g[t] = entry;
-        if (Trace) Trace(q, t, entry, from);
     }
 }
 

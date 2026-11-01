@@ -18,7 +18,6 @@
 #include "pad.h"
 #include "gamedata.h"
 #include "talklog.h"
-#include "prof.h"
 #include <algorithm>
 #include <windows.h>
 #include <cstring>
@@ -34,7 +33,6 @@ using namespace G;
 namespace {
 std::string Lower(std::string s) { return QD_Lower(std::move(s)); }
 void* g_jrlModule = nullptr;
-std::vector<uint32_t> g_fakeOffers;
 bool g_debugTargets = false;           // log the targets of every quest on the next scan
 
 // ---- server (in-process in single player) ----
@@ -247,10 +245,6 @@ bool Begin(void* sp, void* mod) {
     J.act = ActiveQuests(sp, J.r.known);
     for (auto& a : J.act) J.r.state[a.tag] = a.state;
     J.me = Id(Player()) & 0x7fffffffu;
-    for (uint32_t f : g_fakeOffers) {                        // tests: dev command qoffer
-        void* o = SrvObject(f);
-        if (o) J.r.offers.push_back({f, SrvAreaId(o), SrvPos(o), false, {J.act.empty() ? std::string("test") : J.act[0].tag}});
-    }
     return true;
 }
 
@@ -507,7 +501,6 @@ void Update() {
     lastStep = g_pad.now;
     if (G::Loading()) { J.running = false; S.lastScan = g_pad.now; return; }
     if (!J.running && g_pad.now - S.lastScan <= 2.0) return;
-    ProfScope ps(PS_QUEST);
     LARGE_INTEGER f, t0, t1; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
     Step(1.0);
     QueryPerformanceCounter(&t1);
@@ -595,4 +588,3 @@ std::vector<QuestOffer> Quest_Offers() {
     return r;
 }
 
-void Quest_DevOffer(uint32_t id) { g_fakeOffers.push_back(id & 0x7fffffffu); S.lastScan = -100; }

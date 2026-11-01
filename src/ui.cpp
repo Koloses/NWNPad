@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cstdio>
 #include "questmark.h"
-#include "gldiag.h"
 #include "render.h"
 #include "uikit.h"
 #include "control.h"
@@ -23,7 +22,6 @@
 #include "store.h"
 #include "rest.h"
 #include "death.h"
-#include "prof.h"
 #include "talklog.h"
 #include "game.h"
 #include "gamedata.h"
@@ -157,18 +155,15 @@ static void UI_Frame(HDC hdc) {
         }
     }
     if (g_cfg.showFps) Fps_Draw();
-    { ProfScope ps(PS_GL); R::End(); }
+    R::End();
 }
 
 static BOOL WINAPI hk_SwapBuffers(HDC hdc) {
     G::NewFrame();
-    GLDiag_PreOverlay();
     Fps_Tick();
-    Prof_Frame();
     Log_Tick();
     Res_NewFrame();
-    if (g_cfg.enabled) { ProfScope ps(PS_UI); UI_Frame(hdc); }
-    GLDiag_PostOverlay();
+    if (g_cfg.enabled) UI_Frame(hdc);
     return o_SwapBuffers(hdc);
 }
 
@@ -197,13 +192,4 @@ void UI_InstallHooks() {
     Popup_InstallHooks();
     Gui_InstallHooks();
     Rest_InstallHooks();
-}
-
-// one line of what the pad UI shows (diagnostics)
-std::string Hub_DebugState();
-std::string UI_DebugState() {
-    char b[256];
-    snprintf(b, sizeof b, "hub %s, dialog %d, charpanel %d, popup %d, held %04x", Hub_DebugState().c_str(), (int)Dialog_Active(),
-             (int)CharPanel_Active(), (int)Popup_Active(), (unsigned)g_pad.held);
-    return b;
 }

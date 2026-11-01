@@ -17,7 +17,6 @@ void Config_Load(const char* ini) {
     c.minimap = geti("Interface", "Minimap", 1, ini);
     c.questMarker = geti("Interface", "QuestMarker", 1, ini);
     c.showFps = geti("Interface", "ShowFPS", 0, ini);
-    c.profile = geti("Debug", "Profile", 0, ini);
     { char v[16] = {}; GetPrivateProfileStringA("Interface", "InventoryView", "grid", v, sizeof v, ini); c.inventoryGrid = _stricmp(v, "list") != 0; }
     c.newDialog = geti("Interface", "GamepadDialogue", 1, ini);
     c.newMenus = geti("Interface", "GamepadMenus", 1, ini);
@@ -35,8 +34,5 @@ void Config_Load(const char* ini) {
     c.targetRange = getf("Targeting", "Range", 12.0f, ini);
     c.interactRange = getf("Targeting", "InteractRange", 5.0f, ini);
     c.rumble = geti("Controls", "Rumble", 1, ini);
-    GetPrivateProfileStringA("Developer", "InjectFile", "", c.injectFile, sizeof c.injectFile, ini);
-    c.devDumpArea = geti("Developer", "DumpArea", 0, ini);
-    c.glDiag = geti("Developer", "GLDiag", 0, ini);
-    Log("config: enabled=%d hud=%d dialog=%d menus=%d inject='%s'", c.enabled, c.newHud, c.newDialog, c.newMenus, c.injectFile);
+    Log("config: enabled=%d hud=%d dialog=%d menus=%d", c.enabled, c.newHud, c.newDialog, c.newMenus);
 }

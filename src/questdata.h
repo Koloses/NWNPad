@@ -1,5 +1,5 @@
 // NWNPad - what a module's resources say about its quests: compiled scripts, conversations, blueprints,
-// the journal. Game independent (resources come through QD_Load), so the offline audit tool uses it too.
+// the journal. Game independent (resources come through QD_Load).
 #pragma once
 #include "ncsflow.h"
 #include <cstdint>

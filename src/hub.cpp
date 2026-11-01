@@ -1088,13 +1088,6 @@ void Hub_Toggle() {
     if (!Player()) return;
     if (TABS[HS.tab].event) HS.tab = 0;
     Log("hub: open tab %d", HS.tab);
-    if (g_cfg.devDumpArea) {
-        void* pl = Player(); void* area = F<void*>(pl, OFS::Obj_Area);
-        Vec3 pp = Pos(pl); Log("player at %.1f %.1f %.1f", pp.x, pp.y, pp.z);
-        int n = area ? F<int>(area, OFS::Area_ObjCount) : 0; uint32_t* ids = area ? F<uint32_t*>(area, OFS::Area_ObjIds) : nullptr;
-        for (int i = 0; ids && i < n; i++) { void* o = GetObj(ids[i]); if (!o) continue; if (Type(o) != OT_PLACEABLE && Type(o) != OT_DOOR && Type(o) != OT_CREATURE) continue;
-            Vec3 p = Pos(o); Log("  obj %08x t%d %.1f %.1f '%s'", ids[i], Type(o), p.x, p.y, GD::ObjName(ids[i]).c_str()); }
-    }
     HS.focus = 0;
     SwitchTab(HS.tab);
 }
@@ -1204,66 +1197,4 @@ void Hub_Draw() {
     for (int i = 0; i < n; i++) if (hints[i].g == GL_B) hasB = true;
     if (!hasB) hints[n++] = {GL_B, HS.filterSlot >= 0 ? "Back" : "Close"};
     UI_DrawHints(hints, n, a);
-}
-
-// developer: open the hub and run "Use" (or Equip) on the first backpack item whose name contains the text
-void Hub_DevUse(const char* want, bool equip) {
-    void* pl = Player();
-    if (!pl) return;
-    std::vector<InvItem> pack; InvItem eq[ES_TOTAL];
-    Inv::Gather(pl, pack, eq);
-    for (auto& it : pack) {
-        std::string l = it.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
-        if (l.find(want) == std::string::npos) continue;
-        if (!HS.open) Hub_Toggle();
-        Log("dev: hub %s %08x '%s'", equip ? "equip" : "use", it.id, it.name.c_str());
-        if (equip) Inv::Equip(pl, it, -1);
-        else if (!Inv::UseItem(pl, it.id)) { CenterMouse(); Inv::OpenRadial(it.id); }
-        return;
-    }
-    Log("dev: no item matching '%s'", want);
-}
-
-
-// developer: put the first backpack / equipped item whose name contains the text on a quick slot of the active set
-void Hub_DevQuick(int slot, const char* want) {
-    void* pl = Player();
-    if (!pl) return;
-    std::vector<InvItem> pack; InvItem eq[ES_TOTAL];
-    Inv::Gather(pl, pack, eq);
-    for (auto& e : eq) if (e.item) pack.push_back(e);
-    for (auto& it : pack) {
-        std::string l = it.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
-        if (l.find(want) == std::string::npos) continue;
-        int pw = it.identified && it.equipMask && Inv::Powers(it.id).size() == 1 ? 0 : -1;
-        Log("dev: qbitem %d %08x '%s' -> %d", slot, it.id, it.name.c_str(), QB_SetItem(g_ctl.quickBank, slot, it.id, pw));
-        return;
-    }
-    Log("dev: no item matching '%s'", want);
-}
-
-// developer: select the backpack item whose name contains the text (any page)
-void Hub_DevSelect(const char* want) {
-    for (auto& e : HS.eq) {
-        if (!e.item) continue;
-        std::string l = e.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
-        if (l.find(want) == std::string::npos) continue;
-        Log("dev: select equipped %08x '%s'", e.id, e.name.c_str());
-        OpenActions(e);
-        return;
-    }
-    for (auto& it : HS.pack) {
-        std::string l = it.name; for (auto& c : l) c = (char)tolower((unsigned char)c);
-        if (l.find(want) == std::string::npos) continue;
-        HS.focus = 1; HS.selId = it.id;
-        Log("dev: select %08x '%s' page %d", it.id, it.name.c_str(), it.page);
-        return;
-    }
-    Log("dev: no item matching '%s'", want);
-}
-
-std::string Hub_DebugState() {
-    if (!HS.open) return "closed";
-    char b[96]; snprintf(b, sizeof b, "tab %d menu %d", HS.tab, (int)HS.menu);
-    return b;
 }

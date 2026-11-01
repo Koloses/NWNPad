@@ -106,8 +106,7 @@ nearest of them; someone who takes the quest on waits while what he needs is sti
 carry it yet). The mod reads the module's and your character's script variables live, so steps already
 done drop out, and people whose conversation already moved the quest on are left out while someone else
 can still move it. Henchmen's status entries, and a tale your henchman will go on with later, show no
-marker. To check the rules without a save for every quest, `tools/qaudit` runs the same code over a
-module file and lists the targets of every quest at every journal entry.
+marker.
 A gold "!" above someone (and on the minimap and the map) means their conversation can start a quest
 you don't have yet; the target frame names the quest. A grey "!" means its conversation first checks
 another quest you haven't got, so it may not be offered yet. Conversations can have other conditions
@@ -120,9 +119,7 @@ single player; when your DNS doesn't answer, the game stands still until Windows
 instead; the game is told to try again later until one succeeds.
 
 **Frame rate:** `ShowFPS=1` in `[Interface]` shows frames per second, the average and worst frame
-time of the last second and the OpenGL renderer (e.g. zink on your GPU) in the top-left corner. Frames
-where NWNPad itself takes more than 8 ms are written to NWNPad.log ("prof:"); `Profile=1` in
-`[Debug]` adds a summary every 10 seconds.
+time of the last second and the OpenGL renderer (e.g. zink on your GPU) in the top-left corner.
 
 **Corpses** are no longer targeted (their loot is in the bag they drop); the pause pointer still
 reaches them.
@@ -243,14 +240,6 @@ B goes back, the right stick scrolls lists.
 to fall back to the game's own panels, adjust dead zones, camera speed and inversion,
 target ranges, UI scale and rumble.
 
-## OpenGL diagnostics
-
-`[Developer] GLDiag=1` in `NWNPad.ini` writes `bin\win32\NWNPad-diag\NWNPad-gl.log` (GPU, driver, every
-shader compile / link with errors, driver warnings) and works even with `Enabled=0`. F11 (or both
-stick clicks held for a second) captures the next frame into `NWNPad-diag\capture-<time>`: screenshot,
-every draw call with its shader program, textures and uniform values, the shader sources and the
-textures as TGA files.
-
 ## Building
 
 Linux with mingw-w64 (`x86_64-w64-mingw32-g++`), Python 3 with `pefile`:
@@ -261,7 +250,7 @@ make GAMEEXE=/path/to/nwmain.exe
 
 `tools_gen_sigs.py` reads the first bytes of every game function the mod calls from the
 supported `nwmain.exe` so the DLL can verify the build at start-up. Fonts are embedded from
-`fonts/` (`tools_embed_fonts.py`). See `HANDOVER.md` and `docs/RE_NOTES.md` for the internals.
+`fonts/` (`tools_embed_fonts.py`). See `docs/ARCHITECTURE.md` and `docs/RE_NOTES.md` for the internals.
 
 ## Credits
 

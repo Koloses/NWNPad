@@ -1,7 +1,6 @@
-# NWNPad - handover
+# NWNPad - architecture
 
 Gamepad mod for Neverwinter Nights: Enhanced Edition, Win64 build 8193.37-14 (git d950219).
-State: feature complete for single player; all screens exercised under Wine with a virtual pad.
 
 ## How it hooks in
 
@@ -33,7 +32,7 @@ Hooks (MinHook):
 |---|---|
 | `game.*` | addresses, offsets, accessors (player, objects, camera, world-to-screen, RTTI class names) |
 | `hooks.*` | hook install + signature check, hit-check override |
-| `pad.*` | XInput (xinput1_4/1_3/9_1_0), dead zones, repeat, rumble, developer inject file |
+| `pad.*` | XInput (xinput1_4/1_3/9_1_0), dead zones, repeat, rumble |
 | `control.*` | movement, camera, soft targeting, A / hold-A, quickslots, radial and action-target control |
 | `ui.*` | frame hook and input routing between the screens below |
 | `render.*`, `font.cpp`, `fonts_data.c` | overlay renderer, SDF font atlas (Cinzel, Lora embedded) |
@@ -70,39 +69,3 @@ call-graph propagation). Every function the mod calls was checked by decompiling
 Rules of thumb: `CClientExoAppInternal`/`CNWCCreatureStats` offsets match Linux; most other
 client classes are Linux-0x20 on Windows; Windows vtable offsets are Linux-8.
 All addresses and structures are in `docs/RE_NOTES.md`.
-
-## Testing (what was done)
-
-Wine 9 + Xvfb + llvmpipe, game launched with `+TestNewModule "Prelude"` /
-`"Contest Of Champions 0492"`. The `[Developer] InjectFile` setting makes the pad read
-`buttons lx ly rx ry lt rt` from a text file every frame; `<InjectFile>.cmd` accepts
-`target <name>` (lock the soft target), `use <name>` (default action on an object),
-`ev <hex>` (fire a game input event), `journal` (log quest counts), `probe` (log screen
-projection), `panel` (dump live panels and their controls), `click <LayoutName>`, `levelup`
-and `tda <2da> <row|-1>`. Character creation is reached with `+LoadNewModule "Prelude"`
-(character list) and New Character. `tools/wine-test/regress.sh` runs the end-to-end checks. Console cheats
-(`DebugMode 1`, `dm_spawncreature`, ...) were typed with xdotool. Verified: movement, camera,
-targeting, interact, hold-A radial and wheel selection, quickslots, spell targeting confirm,
-conversation, hub tabs, equip / unequip, item radial, examine, quickbar assign radial,
-spells page (bard: cast, quickbar assign; wizard: cast, prepare, clear), journal (Chapter 1
-quest), map (Prelude / Chapter 1 areas), save to a new slot, save list with previews,
-item descriptions in inventory / loot / merchant,
-container loot / take / close, merchant buy / sell / tabs / pages / close, game panels with the
-cursor (main menu, options, character sheet, spell book, journal, map), rest, inventory item
-menu (split, combine, open bag, put in bag, sort), wizard Empowered and cleric domain
-preparation, party wheel follow, quit confirmation pop-up, full level-up (wizard: class,
-abilities, skills, spells, familiar, summary), full character creation (gender, race,
-portrait, class, alignment, abilities, configure package: skills, feats, school, spells,
-familiar; appearance, name / voice; play).
-
-Not covered in Wine: real XInput hardware, rumble, multiplayer servers, DM client,
-hostile-creature melee (attack goes through the game's own default action / radial).
-Loading a save did nothing in the Wine test setup, also through the game's own Load panel;
-the Load list sends exactly the same request as that panel.
-
-## Ideas for next steps
-
-* Typing a save name or character name (an on-screen keyboard); today the game's panel takes over.
-* Appearance step of character creation (needs the 3D model viewer); uses the cursor.
-* Quick item wheel (potions / scrolls) on a long press.
-* Deity / age fields of character creation (cursor panel).

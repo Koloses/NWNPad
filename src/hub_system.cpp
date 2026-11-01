@@ -414,10 +414,4 @@ void HubSystem_ShowLoad() {
     ReadSaves(); g_mode = M_LOAD; g_lsel = 0; g_lscroll = 0; g_confirm = -1; g_fromDeath = true;
 }
 
-// developer: load the save with this number
-void HubSystem_DevLoad(int number) {
-    ReadSaves();
-    for (int i = 0; i < (int)g_saves.size(); i++) if (g_saves[i].number == number) { LoadFrom(i); return; }
-    Log("dev: no save #%d", number);
-}
 
