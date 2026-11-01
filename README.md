@@ -12,6 +12,11 @@ Everything was built from a decompilation of the game executable; no game files 
 NWNPad is only the gamepad and interface mod; it does not change how the game renders. To run the game's
 OpenGL on Vulkan instead, see the separate NWNZink package.
 
+![HUD in Luskan](screenshots/01-hud-luskan.jpg)
+
+More in [`screenshots/`](screenshots): conversation, action wheel, inventory, character sheet, quickbar,
+journal, map, system menu and the death screen, in several areas of the original campaign (1080p).
+
 ## Install
 
 1. Copy `version.dll` and `NWNPad.ini` into `Neverwinter Nights - Enhanced Edition\bin\win32`
