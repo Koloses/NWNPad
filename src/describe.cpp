@@ -15,8 +15,8 @@
 using namespace G;
 
 namespace {
-const uintptr_t VA_Msg_HandleExamineItemData = 0x140798ce0;   // CNWCMessage::HandleServerToPlayerExamineGui_ItemData
-const uintptr_t VA_Msg_SendExamine = 0x1407be580;            // CNWCMessage::SendPlayerToServerInput_Examine(msg, id)
+const uintptr_t VA_Msg_HandleExamineItemData = 0x14079a1e0;   // CNWCMessage::HandleServerToPlayerExamineGui_ItemData
+const uintptr_t VA_Msg_SendExamine = 0x1407bfa80;            // CNWCMessage::SendPlayerToServerInput_Examine(msg, id)
 
 typedef int (*Handler_t)(void* msg);
 Handler_t o_Handler = nullptr;

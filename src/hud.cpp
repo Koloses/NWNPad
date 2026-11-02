@@ -24,7 +24,7 @@ using namespace G;
 using namespace R;
 
 namespace {
-const uintptr_t VA_AppendToMsgBuffer = 0x1406f3f40;
+const uintptr_t VA_AppendToMsgBuffer = 0x1406f68d0;
 void (*o_AppendToMsgBuffer)(void* gig, void* msg, uint32_t col, uint32_t p4, int p5, void* resref) = nullptr;
 
 struct FeedLine { std::string text; Col col; double t; };
@@ -88,12 +88,12 @@ void ForEachGameHudPanel(bool hide) {
     typedef void (*gs_t)(void*, uint32_t);
     static uint32_t removed = 0;
     uint32_t st = F<uint32_t>(gig, 0x370) & 7;
-    if (hide && st) { ((gs_t)A(0x1406f7a80))(gig, st); removed |= st; }
+    if (hide && st) { ((gs_t)A(0x1406fa410))(gig, st); removed |= st; }
     if (!hide && removed) {
         uint32_t back = removed & 2;
         if ((removed & 1) && F<int>(gig, 0x2c)) back |= 1;
         if ((removed & 4) && GD::IsPaused()) back |= 4;
-        if (back) ((gs_t)A(0x1406f3a40))(gig, back);
+        if (back) ((gs_t)A(0x1406f63d0))(gig, back);
         removed = 0;
     }
 }

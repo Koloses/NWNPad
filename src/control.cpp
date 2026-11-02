@@ -31,12 +31,12 @@ using namespace G;
 // ---------------------------------------------------------------------------------------------
 // extra game entry points used here
 namespace {
-const uintptr_t VA_QuickButton_HandleLeftButton = 0x14085b350;
-const uintptr_t VA_CGuiMan_HandleKeyEvent = 0x1401f3630;
-const uintptr_t VA_CGuiMan_SetMousePosition = 0x1401f4c30;
-const uintptr_t VA_RButtonDown = 0x1406ee750;
-const uintptr_t VA_ActionTarget_LMouseDown = 0x14083a860;
-const uintptr_t VA_WalkPlayerToPoint = 0x1406f0cc0;   // (internal, x, y, z, flags, target id, ...)
+const uintptr_t VA_QuickButton_HandleLeftButton = 0x14085c8f0;
+const uintptr_t VA_CGuiMan_HandleKeyEvent = 0x1401f5270;
+const uintptr_t VA_CGuiMan_SetMousePosition = 0x1401f6870;
+const uintptr_t VA_RButtonDown = 0x1406f10e0;
+const uintptr_t VA_ActionTarget_LMouseDown = 0x14083be00;
+const uintptr_t VA_WalkPlayerToPoint = 0x1406f3650;   // (internal, x, y, z, flags, target id, ...)
 
 void** p_g_pGuiMan = nullptr;
 int* p_radialDepth = nullptr;
@@ -416,7 +416,7 @@ static void RadialControl(void* radial) {
 // (1 self, 2 creature, 4 ground, 8 item, 0x10 door, 0x20 placeable, 0x40 trigger); -1 not known (spells
 // from the spellbook, other powers). The item property mode is the one with its handler at +0xf8.
 static int ActionTargetMask(void* at) {
-    if (!at || F<uintptr_t>(at, 0xf8) != A(0x140701020)) return -1;
+    if (!at || F<uintptr_t>(at, 0xf8) != A(0x1407039b0)) return -1;
     void* it = Inv::ItemById(F<uint32_t>(at, 0x150));
     int idx = F<uint8_t>(at, 0x154);                            // low byte: the property (byte 2: its sub-entry)
     int n = it ? F<int>(it, 0x1f4) : 0;
@@ -498,14 +498,14 @@ static void GiveTo(void* player, void* target, uint32_t itemId) {
         float pos[3] = {0, 0, 0};
         Log("give: %08x uses %08x", tid, itemId);
         typedef void (*fn)(void*, uint32_t, uint32_t, uint32_t, float*);
-        ((fn)A(0x140804240))(player, itemId, 0u | (0xffu << 16), tid, pos);
+        ((fn)A(0x140805740))(player, itemId, 0u | (0xffu << 16), tid, pos);
         return;
     }
     void* msg = Inv::Message();
     if (!msg) return;
     Log("give: barter with %08x offering %08x", tid, itemId);
     typedef void (*fb)(void*, uint32_t, uint32_t);
-    ((fb)A(0x1407b8ef0))(msg, tid, itemId);
+    ((fb)A(0x1407ba3f0))(msg, tid, itemId);
 }
 static void GiveControl(void* player) {
     if (!Inv::ItemById(g_ctl.giveItem)) { g_ctl.giveItem = 0; return; }

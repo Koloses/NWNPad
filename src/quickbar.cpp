@@ -18,8 +18,8 @@
 using namespace G;
 
 namespace {
-const uintptr_t VA_QuickButton_HandleRightButton = 0x14085d270;   // opens the set-button / item radial
-const uintptr_t VA_QuickButton_HandleTriggerTooltip = 0x14085d410;
+const uintptr_t VA_QuickButton_HandleRightButton = 0x14085e810;   // opens the set-button / item radial
+const uintptr_t VA_QuickButton_HandleTriggerTooltip = 0x14085e9b0;
 const size_t QB_Type = 0x140, QB_IconRef = 0x11c, QB_Flags = 8;
 
 typedef void (*ShowTooltip_t)(void* gm, void* exoStr, int p);
@@ -155,7 +155,7 @@ void QB_Clear(int bank, int slot) {
     if (!b) return;
     Log("quickbar clear bank %d slot %d", bank, slot);
     typedef void (*fn)(void*);
-    ((fn)A(0x14085e6c0))(b);              // CGuiQuickButton::RadialMenuItemClearSlot
+    ((fn)A(0x14085fc60))(b);              // CGuiQuickButton::RadialMenuItemClearSlot
 }
 
 static const InvItem* CachedItem(uint32_t id) {
@@ -191,7 +191,7 @@ bool QB_SetItem(int bank, int slot, uint32_t itemId, int power) {
     if (!b) return false;
     typedef void (*fn)(void*, uint32_t, int, int);
     // CGuiQuickButton::SetButtonItem: low byte the active property (0xff: the item's own use), byte 2 its sub-entry
-    ((fn)A(0x1408661c0))(b, itemId, 0xff0000 | (power >= 0 && power < 0xff ? power : 0xff), 0);
+    ((fn)A(0x140867760))(b, itemId, 0xff0000 | (power >= 0 && power < 0xff ? power : 0xff), 0);
     Log("quickbar bank %d slot %d item %08x power %d -> type %d", bank, slot, itemId, power, F<uint8_t>(b, QB_Type));
     return F<uint8_t>(b, QB_Type) != 0;
 }

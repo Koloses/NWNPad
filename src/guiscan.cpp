@@ -21,7 +21,7 @@
 using namespace G;
 
 namespace {
-const uintptr_t VA_ImportLayoutData = 0x1401fc470;   // (object, panel, name)
+const uintptr_t VA_ImportLayoutData = 0x1401fe0b0;   // (object, panel, name)
 typedef int (*Import_t)(void* obj, void* panel, const char* name);
 Import_t o_Import = nullptr;
 std::map<void*, std::vector<GuiControl>> g_panels;
@@ -82,8 +82,8 @@ void Gui_InstallHooks() {
     fLine = (GetLine_t)GetProcAddress(exe, "?GetTextLine@StringGob@@UEAAPEBDH@Z");
     fCount = (GetCount_t)GetProcAddress(exe, "?GetTextLineCount@StringGob@@UEAAHXZ");
     o_Import = (Import_t)Hook_Create(VA_ImportLayoutData, (void*)hk_Import, "CGuiObject::ImportLayoutData");
-    o_PActivate = (PActivate_t)Hook_Create(0x1401fa230, (void*)hk_PActivate, "CGuiPanel::Activate");
-    o_PDeactivate = (PDeactivate_t)Hook_Create(0x1401fa830, (void*)hk_PDeactivate, "CGuiPanel::Deactivate");
+    o_PActivate = (PActivate_t)Hook_Create(0x1401fbe70, (void*)hk_PActivate, "CGuiPanel::Activate");
+    o_PDeactivate = (PDeactivate_t)Hook_Create(0x1401fc470, (void*)hk_PDeactivate, "CGuiPanel::Deactivate");
     fHide = (PanelFn)GetProcAddress(exe, "?Hide@CGuiPanel@@QEAAXXZ");
     void* uh = (void*)GetProcAddress(exe, "?UnHide@CGuiPanel@@QEAAXXZ");
     if (uh) o_UnHide = (PanelFn)Hook_Create((uintptr_t)uh - (uintptr_t)exe + 0x140000000ull, (void*)hk_UnHide, "CGuiPanel::UnHide");

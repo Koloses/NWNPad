@@ -17,10 +17,10 @@ using namespace G;
 using namespace R;
 
 namespace {
-const uintptr_t VA_Creature_PerformQuickChat = 0x140803f40;   // (creature, voice id): shouted orders
-const uintptr_t VA_Msg_AssociateCommand = 0x1407bdbe0;        // (msg, associate, command)
-const uintptr_t VA_Msg_PossessFamiliar = 0x1407bea40;         // (msg)
-const uintptr_t VA_App_PlayerAssociateType = 0x1406a9820;     // (app) -> type of the creature we control
+const uintptr_t VA_Creature_PerformQuickChat = 0x140805440;   // (creature, voice id): shouted orders
+const uintptr_t VA_Msg_AssociateCommand = 0x1407bf0e0;        // (msg, associate, command)
+const uintptr_t VA_Msg_PossessFamiliar = 0x1407bff40;         // (msg)
+const uintptr_t VA_App_PlayerAssociateType = 0x1406ac1b0;     // (app) -> type of the creature we control
 
 enum Cmd { C_FOLLOW, C_GUARD, C_ATTACK, C_HOLD, C_HEAL, C_STEALTH, C_SEARCH, C_POSSESS };
 struct Item { Cmd cmd; const char* label; const char* icon; };

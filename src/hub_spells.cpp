@@ -29,10 +29,10 @@ namespace {
 //   CExoArrayList<CNWCStats_Spell*>[10] at +0xa0, spells per day left uint8[10] at +0x140,
 //   class id +0x14d, class level +0x14e
 // CNWCStats_Spell: id +0, ready +4, metamagic +8, domain +0x10
-const uintptr_t VA_QuickButton_ActionCastSpell = 0x140858790;   // reads the spell menu id at this+0x110
-const uintptr_t VA_QuickButton_SetSpellMenuID = 0x1408678d0;
-const uintptr_t VA_Msg_SpellMemorize = 0x1407c2370;            // (msg, class idx, spell, slot, domain level, meta)
-const uintptr_t VA_Msg_SendPlayerToServerMessage = 0x1407c10c0;
+const uintptr_t VA_QuickButton_ActionCastSpell = 0x140859d30;   // reads the spell menu id at this+0x110
+const uintptr_t VA_QuickButton_SetSpellMenuID = 0x140868e70;
+const uintptr_t VA_Msg_SpellMemorize = 0x1407c3870;            // (msg, class idx, spell, slot, domain level, meta)
+const uintptr_t VA_Msg_SendPlayerToServerMessage = 0x1407c25c0;
 
 struct SpellInfo { std::string name, desc, icon, school; int innate = 0; std::vector<int> sub; bool ok = false; };
 struct ClassInfo { int idx, id, level; std::string name; bool prepared; std::string column; };

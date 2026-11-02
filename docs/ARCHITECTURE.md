@@ -1,6 +1,6 @@
 # NWNPad - architecture
 
-Gamepad mod for Neverwinter Nights: Enhanced Edition, Win64 build 8193.37-14 (git d950219).
+Gamepad mod for Neverwinter Nights: Enhanced Edition, Win64 build 89.8193.37-17 (git 26c6e573).
 
 ## How it hooks in
 

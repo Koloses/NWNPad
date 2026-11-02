@@ -18,31 +18,31 @@ using namespace G;
 
 namespace {
 // CNWCCreature (Win)
-const uintptr_t VA_PerformEquipItem = 0x140803bd0;     // (cre, itemId, slotMask)
-const uintptr_t VA_PerformUnEquipItem = 0x140804190;   // (cre, itemId)
-const uintptr_t VA_PerformDropItem = 0x1408039d0;      // (cre, itemId)
-const uintptr_t VA_PerformExamine = 0x140803d90;       // (cre, id, 0, 0)
-const uintptr_t VA_Item_ActivateRadial = 0x14083b890;  // (item, int)
-const uintptr_t VA_Item_GetName = 0x14083c300;         // (item, CExoString*, int)
-const uintptr_t VA_App_GetNWCMessage = 0x1406a9600;    // (app)
-const uintptr_t VA_App_GetInventoryPanel = 0x1406a9250; // (app)
-const uintptr_t VA_Msg_RepositoryMove = 0x1407bfb30;   // (msg, item, x, y, repository)
-const uintptr_t VA_Msg_SendToServer = 0x1407c10c0;     // (msg, major, minor, data, size)
-const uintptr_t VA_Msg_SplitItem = 0x1407beb50;        // (msg, item, count)
-const uintptr_t VA_Msg_MergeItem = 0x1407be890;        // (msg, item in place, dropped item)
-const uintptr_t VA_Msg_UseObject = 0x1407bf2c0;        // (msg, object, 0, 0): opens a bag
-const uintptr_t VA_PanelInv_HandleXButton = 0x140854e80;   // (panel)
-const uintptr_t VA_Msg_GuiInventoryStatus = 0x1407bcc10;   // (msg, open, creatureId)
-const uintptr_t VA_Msg_GuiCharSheetStatus = 0x1407bc8d0;   // (msg, char page (-1 close), creatureId)
+const uintptr_t VA_PerformEquipItem = 0x1408050d0;     // (cre, itemId, slotMask)
+const uintptr_t VA_PerformUnEquipItem = 0x140805690;   // (cre, itemId)
+const uintptr_t VA_PerformDropItem = 0x140804ed0;      // (cre, itemId)
+const uintptr_t VA_PerformExamine = 0x140805290;       // (cre, id, 0, 0)
+const uintptr_t VA_Item_ActivateRadial = 0x14083ce30;  // (item, int)
+const uintptr_t VA_Item_GetName = 0x14083d8a0;         // (item, CExoString*, int)
+const uintptr_t VA_App_GetNWCMessage = 0x1406abf90;    // (app)
+const uintptr_t VA_App_GetInventoryPanel = 0x1406abbe0; // (app)
+const uintptr_t VA_Msg_RepositoryMove = 0x1407c1030;   // (msg, item, x, y, repository)
+const uintptr_t VA_Msg_SendToServer = 0x1407c25c0;     // (msg, major, minor, data, size)
+const uintptr_t VA_Msg_SplitItem = 0x1407c0050;        // (msg, item, count)
+const uintptr_t VA_Msg_MergeItem = 0x1407bfd90;        // (msg, item in place, dropped item)
+const uintptr_t VA_Msg_UseObject = 0x1407c07c0;        // (msg, object, 0, 0): opens a bag
+const uintptr_t VA_PanelInv_HandleXButton = 0x140856420;   // (panel)
+const uintptr_t VA_Msg_GuiInventoryStatus = 0x1407be110;   // (msg, open, creatureId)
+const uintptr_t VA_Msg_GuiCharSheetStatus = 0x1407bddd0;   // (msg, char page (-1 close), creatureId)
 // CNWCCreatureStats
-const uintptr_t VA_Stats_ClassAbilityAdjust = 0x1407efc10;   // (stats, ability) -> char
-const uintptr_t VA_Stats_GetArmorClass = 0x1407ee4c0;        // (stats, int)
-const uintptr_t VA_Stats_CombatModeAC = 0x1407f09d0;         // (stats, creature)
-const uintptr_t VA_Stats_BAB = 0x1407ef400;                  // (stats)
-const uintptr_t VA_Stats_ClassesString = 0x1407efd30;        // (stats, CExoString*, char)
-const uintptr_t VA_Stats_RaceString = 0x1407f52c0;           // (stats, CExoString*)
-const uintptr_t VA_Stats_ExpNeeded = 0x1407f28a0;            // (stats)
-const uintptr_t VA_Stats_GetLevel = 0x1407f4870;
+const uintptr_t VA_Stats_ClassAbilityAdjust = 0x1407f1110;   // (stats, ability) -> char
+const uintptr_t VA_Stats_GetArmorClass = 0x1407ef9c0;        // (stats, int)
+const uintptr_t VA_Stats_CombatModeAC = 0x1407f1ed0;         // (stats, creature)
+const uintptr_t VA_Stats_BAB = 0x1407f0900;                  // (stats)
+const uintptr_t VA_Stats_ClassesString = 0x1407f1230;        // (stats, CExoString*, char)
+const uintptr_t VA_Stats_RaceString = 0x1407f67c0;           // (stats, CExoString*)
+const uintptr_t VA_Stats_ExpNeeded = 0x1407f3da0;            // (stats)
+const uintptr_t VA_Stats_GetLevel = 0x1407f5d70;
 
 // CNWCItem field offsets (Win)
 const size_t IT_BaseItem = 0x40, IT_Id = 0x50, IT_Identified = 0x1c0, IT_Icon = 0x238;
@@ -277,7 +277,7 @@ void RequestPage(int p) {
     void* panel = InventoryPanel();
     if (!panel || p < 0 || p >= kPages) return;
     typedef void (*fn)(void*, int);
-    ((fn)A(0x140854d40))(panel, p);              // CPanelInventory::HandleSelect: the server switches pages
+    ((fn)A(0x1408562e0))(panel, p);              // CPanelInventory::HandleSelect: the server switches pages
     g_wantPage = p; g_reqTime = NowS();
     g_lastSet.clear(); g_lastChange = g_reqTime;
 }
@@ -379,7 +379,7 @@ static int hk_ItemAdd(void* msg, int a, void** out) {
     return r;
 }
 void InstallHooks() {
-    o_ItemAdd = (ItemAdd_t)Hook_Create(0x14079e930, (void*)hk_ItemAdd, "HandleServerToPlayerItemUpdate_Add");
+    o_ItemAdd = (ItemAdd_t)Hook_Create(0x14079fe30, (void*)hk_ItemAdd, "HandleServerToPlayerItemUpdate_Add");
 }
 
 void GatherContainer(void* cre, std::vector<InvItem>& out) {
@@ -525,12 +525,12 @@ void UsePower(uint32_t id, int index) {
     typedef void* (*fnew)(size_t);
     typedef void* (*fctor)(void*);
     typedef void (*fact)(void*, uint32_t, uint64_t, char*);
-    void* t = ((fnew)A(0x140c0e364))(0x168);                  // CNWCActionTarget (item property)
+    void* t = ((fnew)A(0x140c10324))(0x168);                  // CNWCActionTarget (item property)
     if (!t) return;
-    t = ((fctor)A(0x140700e60))(t);
+    t = ((fctor)A(0x1407037f0))(t);
     char resref[32] = {};
     Log("use %08x power %d: item target mode", id, index);
-    ((fact)A(0x140701060))(t, id, (uint64_t)index, resref);
+    ((fact)A(0x1407039f0))(t, id, (uint64_t)index, resref);
 }
 bool UseItem(void* cre, uint32_t id) {
     void* it = ItemById(id);
@@ -542,7 +542,7 @@ bool UseItem(void* cre, uint32_t id) {
         float pos[3] = {0, 0, 0};
         Log("drink %08x", id);
         typedef void (*fn)(void*, uint32_t, uint32_t, uint32_t, float*);
-        ((fn)A(0x140804240))(cre, id, 0u | (0xffu << 16), Id(cre), pos);
+        ((fn)A(0x140805740))(cre, id, 0u | (0xffu << 16), Id(cre), pos);
         return true;
     }
     UsePower(id, 0);
@@ -728,7 +728,7 @@ CharInfo Character(void* cre) {
         typedef int (*fi)(void*, int);
         typedef int (*f1)(void*);
         typedef int (*fm)(void*, void*);
-        int mode = ((fm)A(0x1407f0a60))(st, cre);
+        int mode = ((fm)A(0x1407f1f60))(st, cre);
         auto general = [&](bool off) {
             int sum = 0;
             void** nodes = F<void**>(ci, 0x20); int n = F<int>(ci, 0x28);
@@ -747,14 +747,14 @@ CharInfo Character(void* cre) {
             std::string r;
             int add = handMod + mode + general(off);
             for (int i = 0; i < count && i < 8; i++) {
-                int v = ((fi)A(0x1407f5090))(st, i) + add;
+                int v = ((fi)A(0x1407f6590))(st, i) + add;
                 char b[16]; snprintf(b, sizeof b, "%s%+d", i ? "/" : "", v);
                 r += b;
             }
             return r;
         };
-        c.attack = list(((f1)A(0x1407f51c0))(st), (signed char)ci[1], false);
-        int off = ((f1)A(0x1407f5150))(st);
+        c.attack = list(((f1)A(0x1407f66c0))(st), (signed char)ci[1], false);
+        int off = ((f1)A(0x1407f6650))(st);
         if (off > 0) c.attackOff = list(off, (signed char)ci[3], true);
     }
     c.ok = true;
@@ -787,7 +787,7 @@ std::vector<SkillInfo> Skills(void* cre) {
             s.total = fRank(sst, (uint8_t)i, nullptr, 0);
         } else {
             s.rank = ranks && !F<int>(st, 0x110) ? ranks[i] : 0;
-            s.total = s.rank + ((fm)A(0x1407f5510))(st, (uint16_t)i);
+            s.total = s.rank + ((fm)A(0x1407f6a10))(st, (uint16_t)i);
         }
         int nm = t.Int(i, "Name", -1);
         if (nm < 0) continue;
@@ -830,7 +830,7 @@ Load Encumbrance(void* cre, int itemsWeight, int str) {
     if (cre && srv && F<void*>(srv, 8) && !Loading() && fCre) {
         if (void* sc = fCre(srv, Id(cre) & 0x7fffffffu)) {
             typedef int (*fn)(void*);
-            l.weight = ((fn)A(0x140387320))(sc);             // CNWSCreature::ComputeTotalWeightCarried
+            l.weight = ((fn)A(0x140388fa0))(sc);             // CNWSCreature::ComputeTotalWeightCarried
             static auto fStr = (uint8_t (*)(void*))GetProcAddress(exe, "?GetSTRStat@CNWSCreatureStats@@QEAAEXZ");
             void* sst = F<void*>(sc, 0xad0);
             if (sst && fStr) str = fStr(sst);                // what UpdateEncumbranceState uses

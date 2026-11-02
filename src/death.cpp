@@ -30,8 +30,8 @@ void HubSystem_ShowLoad();
 namespace {
 const size_t GIG_Death = 0xe8;
 const size_t B_Load = 0x1a8, B_Respawn = 0x278, B_Exit = 0x348, B_Wait = 0x418;
-const uintptr_t H_Load = 0x140885580, H_Respawn = 0x1408856d0, H_Exit = 0x140885470, H_Wait = 0x140885970;
-const uintptr_t H_StopWaiting = 0x140885390;            // CPanelDeathMenu::HandleAnyInputEvent
+const uintptr_t H_Load = 0x140886b10, H_Respawn = 0x140886c60, H_Exit = 0x140886a00, H_Wait = 0x140886f00;
+const uintptr_t H_StopWaiting = 0x140886920;            // CPanelDeathMenu::HandleAnyInputEvent
 const size_t D_Waiting = 0x100;                          // CGuiPressAnyKeyControl while waiting for help
 const size_t D_Message = 0x110;                          // label with the module's message (PopUpDeathGUIPanel)
 

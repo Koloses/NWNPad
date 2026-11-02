@@ -23,10 +23,10 @@ using namespace G;
 using namespace R;
 
 namespace {
-const uintptr_t VA_StartTimedEvent = 0x1406f9910;      // CGuiInGame::StartPlayerTimedEventGui(this, ms, strref)
+const uintptr_t VA_StartTimedEvent = 0x1406fc2a0;      // CGuiInGame::StartPlayerTimedEventGui(this, ms, strref)
 const size_t GIG_TimedEvent = 0xf0;
 const size_t TE_Duration = 0x2e0, TE_Elapsed = 0x2e4;  // seconds (float)
-const uintptr_t VA_TimedEvent_Cancel = 0x1406f5450;    // CGuiPanelPlayerTimedEvent::HandleCancelButton(this)
+const uintptr_t VA_TimedEvent_Cancel = 0x1406f7de0;    // CGuiPanelPlayerTimedEvent::HandleCancelButton(this)
 
 typedef void (*Start_t)(void*, unsigned, unsigned);
 Start_t o_Start = nullptr;

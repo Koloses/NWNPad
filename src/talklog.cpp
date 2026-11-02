@@ -22,8 +22,8 @@
 using namespace G;
 
 namespace {
-const uintptr_t VA_JournalUpdated = 0x1407d4c50;      // CNWCJournal::JournalUpdated(int deferrable, int completed, CExoString& name)
-const uintptr_t VA_LoadBarState = 0x1406a9490;        // CClientExoApp::GetLoadBarState
+const uintptr_t VA_JournalUpdated = 0x1407d6150;      // CNWCJournal::JournalUpdated(int deferrable, int completed, CExoString& name)
+const uintptr_t VA_LoadBarState = 0x1406abe20;        // CClientExoApp::GetLoadBarState
 const size_t MaxTalks = 400, MaxLines = 400;
 const double LinkAfter = 6.0;                         // seconds after a conversation closed that a journal update still belongs to it
 const char* FileName = "nwnpad_talk.txt";

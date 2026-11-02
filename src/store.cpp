@@ -24,12 +24,12 @@ using namespace G;
 using namespace R;
 
 namespace {
-const uintptr_t VA_App_GetWorldStore = 0x1406a9990;    // (app) -> CNWCStore*
-const uintptr_t VA_Msg_StoreBuy = 0x1407c2710;         // (msg, item, x, y, repository)
-const uintptr_t VA_Msg_StoreSell = 0x1407c2800;        // (msg, item)
-const uintptr_t VA_Msg_StoreClose = 0x1407c2550;       // (msg)
-const uintptr_t VA_Store_IsRestrictedBuy = 0x1408402f0; // (store, baseItem)
-const uintptr_t VA_PanelInv_HandleXButton = 0x140854e80;
+const uintptr_t VA_App_GetWorldStore = 0x1406ac320;    // (app) -> CNWCStore*
+const uintptr_t VA_Msg_StoreBuy = 0x1407c3c10;         // (msg, item, x, y, repository)
+const uintptr_t VA_Msg_StoreSell = 0x1407c3d00;        // (msg, item)
+const uintptr_t VA_Msg_StoreClose = 0x1407c3a50;       // (msg)
+const uintptr_t VA_Store_IsRestrictedBuy = 0x140841890; // (store, baseItem)
+const uintptr_t VA_PanelInv_HandleXButton = 0x140856420;
 // CNWCStore (Win)
 const size_t ST_Panel = 0x170, ST_Open = 0x178, ST_MarkDown = 0x17c, ST_MarkUp = 0x17e, ST_MarkDownStolen = 0x180;
 const size_t ST_BlackMarket = 0x184, ST_MaxBuy = 0x18c, ST_Gold = 0x190;
@@ -81,7 +81,7 @@ void SendByteMsg(uint8_t minor, uint8_t value) {
     uint8_t* data = nullptr; unsigned size = 1;
     if (fGetWrite(m, &data, &size)) {
         typedef void (*fn)(void*, uint8_t, uint8_t, uint8_t*, unsigned);
-        ((fn)A(0x1407c10c0))(m, 7, minor, data, size);
+        ((fn)A(0x1407c25c0))(m, 7, minor, data, size);
     }
 }
 

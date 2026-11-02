@@ -83,7 +83,7 @@ void Read(bool force = false) {
 }
 
 // the server sends the quest list only while the journal screen is open
-const uintptr_t VA_Msg_SendPlayerToServerMessage = 0x1407c10c0;
+const uintptr_t VA_Msg_SendPlayerToServerMessage = 0x1407c25c0;
 bool g_screen = false;
 void Screen(bool open) {
     if (open == g_screen) return;

@@ -1,6 +1,6 @@
-# NWN:EE (build 8193.37, d950219, Jan 2025) – reverse-engineering notes
+# NWN:EE (build 89.8193.37-17, 26c6e573, Oct 2025) – reverse-engineering notes
 Win64 nwmain.exe image base 0x140000000. Linux nwmain-linux (not stripped) used as symbol reference.
-Linux addresses below are ELF vaddr (Ghidra = +0x100000).
+Linux addresses below are ELF vaddr (Ghidra = +0x100000). Windows addresses are for 89.8193.37-17; the Linux ones are from the 89.8193.37-14 Linux build.
 
 ## Globals
 - g_pAppManager (exported ?g_pAppManager@@3PEAVCAppManager@@EA). *g_pAppManager = CClientExoApp*; CClientExoApp+8 = CClientExoAppInternal*.
@@ -14,17 +14,17 @@ Linux addresses below are ELF vaddr (Ghidra = +0x100000).
 
 | function | Linux | Win |
 |---|---|---|
-| ProcessInput | 0x665140 | 0x1406eeb50 |
-| HandleInputEvent(id,pressed,prev,gui) | 0x663140 | 0x1406eada0 |
-| UpdateDriveMode | 0x65db50 | 0x1406ef4b0 |
-| GetPlayerCreature | 0x63dcd0 | 0x1406d6140 |
-| GetModule | 0x638c50 | 0x1406d5970 |
-| GetGameObject(id) | 0x63d680 | 0x1406d5860 |
-| PerformLButtonDownAction | 0x6625c0 | 0x1406ed940 |
-| PerformDefaultActionOnObject(obj) | 0x65ec00 | 0x1406ed540 |
-| FeedbackHitCheckHostile(obj**,pos*,int*,int) | 0x65ede0 | 0x1406e84a0 |
-| FeedbackHitCheckNonHostile | 0x65fcc0 | 0x1406e9370 |
-| CClientExoApp::GetPlayerCreature | | 0x1406a9810 |
+| ProcessInput | 0x665140 | 0x1406f14e0 |
+| HandleInputEvent(id,pressed,prev,gui) | 0x663140 | 0x1406ed720 |
+| UpdateDriveMode | 0x65db50 | 0x1406f1e40 |
+| GetPlayerCreature | 0x63dcd0 | 0x1406d8ad0 |
+| GetModule | 0x638c50 | 0x1406d8300 |
+| GetGameObject(id) | 0x63d680 | 0x1406d81f0 |
+| PerformLButtonDownAction | 0x6625c0 | 0x1406f02c0 |
+| PerformDefaultActionOnObject(obj) | 0x65ec00 | 0x1406efec0 |
+| FeedbackHitCheckHostile(obj**,pos*,int*,int) | 0x65ede0 | 0x1406eae20 |
+| FeedbackHitCheckNonHostile | 0x65fcc0 | 0x1406ebcf0 |
+| CClientExoApp::GetPlayerCreature | | 0x1406ac1a0 |
 
 ## CNWCCreature (Win offsets differ from Linux, typically -0x20 after base CNWCObject)
 - +0x38 pos(x,y,z), +0x44 orientation vec, +0xc type, +0x8 object id (CNWCObject base same)
@@ -40,34 +40,34 @@ GCC vtables have 2 dtor slots; MSVC 1 -> Win vfunc offset = Linux offset - 8 for
 ## Function map (Win VA, all verified by decompiling both builds)
 | function | Win |
 |---|---|
-| CClientExoAppInternal::ProcessInput (hooked: pad input before the game) | 0x1406eeb50 |
-| CClientExoAppInternal::HandleInputEvent(this,id,value,prev,gui) | 0x1406eada0 |
-| CClientExoAppInternal::UpdateDriveMode (hooked: analog movement) | 0x1406ef4b0 |
-| CClientExoAppInternal::UpdateMouseCursorAppearance (hooked: hover = soft target) | 0x1406efea0 |
-| CClientExoAppInternal::FeedbackHitCheckHostile / NonHostile (hooked: world pick) | 0x1406e84a0 / 0x1406e9370 |
-| CClientExoAppInternal::PerformDefaultActionOnObject | 0x1406ed540 |
-| CClientExoAppInternal::PerformL/RButtonDownAction | 0x1406ed940 / 0x1406ee750 |
-| CGuiMan::GuiObjectHitCheck (hooked) / HandleKeyEvent / SetMousePosition | 0x1401f31f0 / 0x1401f3630 / 0x1401f4c30 |
+| CClientExoAppInternal::ProcessInput (hooked: pad input before the game) | 0x1406f14e0 |
+| CClientExoAppInternal::HandleInputEvent(this,id,value,prev,gui) | 0x1406ed720 |
+| CClientExoAppInternal::UpdateDriveMode (hooked: analog movement) | 0x1406f1e40 |
+| CClientExoAppInternal::UpdateMouseCursorAppearance (hooked: hover = soft target) | 0x1406f2830 |
+| CClientExoAppInternal::FeedbackHitCheckHostile / NonHostile (hooked: world pick) | 0x1406eae20 / 0x1406ebcf0 |
+| CClientExoAppInternal::PerformDefaultActionOnObject | 0x1406efec0 |
+| CClientExoAppInternal::PerformL/RButtonDownAction | 0x1406f02c0 / 0x1406f10e0 |
+| CGuiMan::GuiObjectHitCheck (hooked) / HandleKeyEvent / SetMousePosition | 0x1401f4e30 / 0x1401f5270 / 0x1401f6870 |
 | Camera::GetYaw / MapToScreen(this, Vec3* out, Vec3* in, bool normalized) | 0x140059020 / 0x140059a90 |
-| CGuiQuickButton::HandleLeftButton / HandleRightButton / HandleTriggerTooltip | 0x14085b350 / 0x14085d270 / 0x14085d410 |
-| CGuiInGame::ShowDialogEntry / ShowDialogReplies / HandleDialogSelection | 0x1406f8bd0 / 0x1406f8f50 / 0x1406f5850 |
-| CGuiInGame::AppendToMsgBuffer (hooked: HUD feed) | 0x1406f3f40 |
-| CGuiActionTarget::HandleLMouseDown | 0x14083a860 |
-| CClientExoApp::GetObjectName(app,id,CExoString*) | 0x1406a9630 |
-| CClientExoApp::GetNWCMessage / GetInventoryPanel / GetWorldStore | 0x1406a9600 / 0x1406a9250 / 0x1406a9990 |
-| CClientExoApp::GetPauseState(app, 2) | 0x1406a96a0 |
-| CNWCCreature::PerformEquipItem(cre,item,slotMask) / UnEquip(cre,item) | 0x140803bd0 / 0x140804190 |
-| CNWCCreature::PerformDropItem(cre,item) / PerformExamine(cre,id,0,0) | 0x1408039d0 / 0x140803d90 |
-| CNWCItem::ActivateRadialMenu(item,int) / GetName(item,CExoString*,int) | 0x14083b890 / 0x14083c300 |
-| CNWCMessage::SendPlayerToServerInventory_RepositoryMove(msg,item,x,y,repo) | 0x1407bfb30 |
-| CNWCMessage::SendPlayerToServerGuiInventory_Status(msg,open,cre) | 0x1407bcc10 |
-| CNWCMessage::SendPlayerToServerGuiCharacterSheet_Status(msg,page,cre) | 0x1407bc8d0 |
-| CNWCMessage::SendPlayerToServerStore_RequestBuy / RequestSell / Close | 0x1407c2710 / 0x1407c2800 / 0x1407c2550 |
-| CNWCMessage::SendPlayerToServerMessage(msg,major,minor,data,size) | 0x1407c10c0 |
-| CPanelInventory::HandleXButton (closes container view) | 0x140854e80 |
-| CNWCStore::GetIsRestrictedBuyItem(store,baseItem) | 0x1408402f0 |
-| CNWCCreatureStats: GetClassesAbilityAdjust / GetArmorClass / GetCombatModeACModifier / GetBaseAttackBonus | 0x1407efc10 / 0x1407ee4c0 / 0x1407f09d0 / 0x1407ef400 |
-| CNWCCreatureStats: GetClassesString / GetRaceString / GetExpNeededForLevelUp / GetLevel | 0x1407efd30 / 0x1407f52c0 / 0x1407f28a0 / 0x1407f4870 |
+| CGuiQuickButton::HandleLeftButton / HandleRightButton / HandleTriggerTooltip | 0x14085c8f0 / 0x14085e810 / 0x14085e9b0 |
+| CGuiInGame::ShowDialogEntry / ShowDialogReplies / HandleDialogSelection | 0x1406fb560 / 0x1406fb8e0 / 0x1406f81e0 |
+| CGuiInGame::AppendToMsgBuffer (hooked: HUD feed) | 0x1406f68d0 |
+| CGuiActionTarget::HandleLMouseDown | 0x14083be00 |
+| CClientExoApp::GetObjectName(app,id,CExoString*) | 0x1406abfc0 |
+| CClientExoApp::GetNWCMessage / GetInventoryPanel / GetWorldStore | 0x1406abf90 / 0x1406abbe0 / 0x1406ac320 |
+| CClientExoApp::GetPauseState(app, 2) | 0x1406ac030 |
+| CNWCCreature::PerformEquipItem(cre,item,slotMask) / UnEquip(cre,item) | 0x1408050d0 / 0x140805690 |
+| CNWCCreature::PerformDropItem(cre,item) / PerformExamine(cre,id,0,0) | 0x140804ed0 / 0x140805290 |
+| CNWCItem::ActivateRadialMenu(item,int) / GetName(item,CExoString*,int) | 0x14083ce30 / 0x14083d8a0 |
+| CNWCMessage::SendPlayerToServerInventory_RepositoryMove(msg,item,x,y,repo) | 0x1407c1030 |
+| CNWCMessage::SendPlayerToServerGuiInventory_Status(msg,open,cre) | 0x1407be110 |
+| CNWCMessage::SendPlayerToServerGuiCharacterSheet_Status(msg,page,cre) | 0x1407bddd0 |
+| CNWCMessage::SendPlayerToServerStore_RequestBuy / RequestSell / Close | 0x1407c3c10 / 0x1407c3d00 / 0x1407c3a50 |
+| CNWCMessage::SendPlayerToServerMessage(msg,major,minor,data,size) | 0x1407c25c0 |
+| CPanelInventory::HandleXButton (closes container view) | 0x140856420 |
+| CNWCStore::GetIsRestrictedBuyItem(store,baseItem) | 0x140841890 |
+| CNWCCreatureStats: GetClassesAbilityAdjust / GetArmorClass / GetCombatModeACModifier / GetBaseAttackBonus | 0x1407f1110 / 0x1407ef9c0 / 0x1407f1ed0 / 0x1407f0900 |
+| CNWCCreatureStats: GetClassesString / GetRaceString / GetExpNeededForLevelUp / GetLevel | 0x1407f1230 / 0x1407f67c0 / 0x1407f3da0 / 0x1407f5d70 |
 Exported (by name): g_pAppManager, g_pGuiMan, g_pRules, g_pExoResMan, g_pTlkTable, CExoResMan::Get,
 CTlkTable::GetSimpleString, CGuiPanel::Hide/Deactivate, CGuiMan::HandleL/RMouseDown/Up, HandleMouseWheel,
 ShowTooltipText, ShowMouse/HideMouse, CNWBaseItemArray::GetBaseItem, CNWMessage::CreateWriteMessage/WriteBYTE/GetWriteMessage,
@@ -126,10 +126,10 @@ memorized CExoArrayList<CNWCStats_Spell*>[10] at +0xa0, spells-per-day left uint
 CNWCStats_Spell: id +0, ready +4, metamagic +8 (byte), domain +0x10.
 Spell "menu id" (quickbar / radial): id bits 0-15, spell level 24-27, class index bits 28-29 + bit 38, metamagic 31-36,
 bit 37 spontaneous conversion.
-Cast: CGuiQuickButton::ButtonActionCastSpell 0x140858790 reads only this+0x110 (menu id) -> game targeting mode.
-Quickbar: CGuiQuickButton::SetButtonSpellMenuID 0x1408678d0 (button, menu id).
-Prepare: SendPlayerToServerSpellMemorize 0x1407c2370 (msg, class idx, spell, slot, domain level, meta) = message 6/0x10;
-clear: message 6/0x11 bytes (class idx, level, slot). Send: CNWCMessage::SendPlayerToServerMessage 0x1407c10c0.
+Cast: CGuiQuickButton::ButtonActionCastSpell 0x140859d30 reads only this+0x110 (menu id) -> game targeting mode.
+Quickbar: CGuiQuickButton::SetButtonSpellMenuID 0x140868e70 (button, menu id).
+Prepare: SendPlayerToServerSpellMemorize 0x1407c3870 (msg, class idx, spell, slot, domain level, meta) = message 6/0x10;
+clear: message 6/0x11 bytes (class idx, level, slot). Send: CNWCMessage::SendPlayerToServerMessage 0x1407c25c0.
 classes.2da SpellCaster / MemorizesSpells / SpellTableColumn; spells.2da Name / IconResRef / SpellDesc / SubRadSpell1-5.
 
 ## Journal (Win)
@@ -145,28 +145,28 @@ map pins +0x2b8 / count +0x2c0. CNWCTile: orientation +0x24 (quarter turns), exp
 (map icon resref at +0x21). CNWCMapPin: object position +0x38, enabled +0x170, note CExoString +0x178.
 
 ## Save / load (Win)
-CSaveGameList ctor 0x140813550 (0x30 bytes: dir names CExoString[] +0, CFileInfo[] +0x10 (0x20 each: file name,
+CSaveGameList ctor 0x140814a50 (0x30 bytes: dir names CExoString[] +0, CFileInfo[] +0x10 (0x20 each: file name,
 year +0x10 month +0x12 day +0x14 hour +0x16 minute +0x18), order int[] +0x20 / count +0x28). Dir = "NNNNNN - name".
-Save: internal 0x1406dc910 (internal, number, name, module name (module+0x18), overwrite dir or "") = message 3/4.
-Load: internal 0x1406dc8f0 (internal, number, name, .sav file name without extension, 0) = message 3/5.
-COptionsPanel (GIG+0xd8, toggled by CGuiInGame::HandleOptionsButton 0x1406f5d30): button callbacks {obj, fn} at
+Save: internal 0x1406df2a0 (internal, number, name, module name (module+0x18), overwrite dir or "") = message 3/4.
+Load: internal 0x1406df280 (internal, number, name, .sav file name without extension, 0) = message 3/5.
+COptionsPanel (GIG+0xd8, toggled by CGuiInGame::HandleOptionsButton 0x1406f86c0): button callbacks {obj, fn} at
 Load +0x240, Save +0x328, SaveChar +0x410, Video +0x4f8, Controls +0x6c8, Exit +0x7b0, Resume +0x898, Game +0x980,
 X +0xa68; the sound button is removed in EE.
 
 ## Item descriptions
-Examine request: CNWCMessage::SendPlayerToServerInput_Examine 0x1407be580 (msg, id); reply handled by
-HandleServerToPlayerExamineGui_ItemData 0x140798ce0, which fills StringGob texts (SetText / AddText / AddLine
+Examine request: CNWCMessage::SendPlayerToServerInput_Examine 0x1407bfa80 (msg, id); reply handled by
+HandleServerToPlayerExamineGui_ItemData 0x14079a1e0, which fills StringGob texts (SetText / AddText / AddLine
 exports) of a new examine window; capture the outermost calls and close the window with CGuiModalPanel::Deactivate.
 
 ## Inventory actions (Win)
-Split stack 0x1407beb50 (msg, id, count) = message 6/0x17; merge 0x1407be890 (msg, into, from) = 6/0x16;
-open a bag = UseObject 0x1407bf2c0 (msg, id, 0, 0); put into a bag = RepositoryMove 0x1407bfb30 (msg, id, 0xff, 0xff, bag).
+Split stack 0x1407c0050 (msg, id, count) = message 6/0x17; merge 0x1407bfd90 (msg, into, from) = 6/0x16;
+open a bag = UseObject 0x1407c07c0 (msg, id, 0, 0); put into a bag = RepositoryMove 0x1407c1030 (msg, id, 0xff, 0xff, bag).
 baseitems.2da Container / Stacking columns.
 
 ## Party (Win)
-CNWCCreature::PerformQuickChat 0x140803f40 (creature, voice id): follow 22, guard 9, attack 0, stand ground 10,
-heal me 4. Associate command 0x1407bdbe0 (msg, associate, cmd): party stealth -22, search -23.
-Possess familiar / return 0x1407bea40 (msg). Controlled associate type 0x1406a9820 (app) (3 = familiar);
+CNWCCreature::PerformQuickChat 0x140805440 (creature, voice id): follow 22, guard 9, attack 0, stand ground 10,
+heal me 4. Associate command 0x1407bf0e0 (msg, associate, cmd): party stealth -22, search -23.
+Possess familiar / return 0x1407bff40 (msg). Controlled associate type 0x1406ac1b0 (app) (3 = familiar);
 creature associate type +0x274.
 
 ## Metamagic and domains
@@ -175,8 +175,8 @@ Silent 33 -> 16 (+1), Still 37 -> 32 (+1). spells.2da MetaMagic column = allowed
 Domain ids: class info +0x14b / +0x14c; domains.2da Level_N = domain spell of level N.
 
 ## Classic panels (generic access)
-CGuiObject::ImportLayoutData 0x1401fc470 (object, panel, layout name) names every control; CGuiPanel::Activate
-0x1401fa230 / Deactivate 0x1401fa830; ?Hide@CGuiPanel / ?UnHide@CGuiPanel exports. CGuiObject flags +8 (bit0 disabled);
+CGuiObject::ImportLayoutData 0x1401fe0b0 (object, panel, layout name) names every control; CGuiPanel::Activate
+0x1401fbe70 / Deactivate 0x1401fc470; ?Hide@CGuiPanel / ?UnHide@CGuiPanel exports. CGuiObject flags +8 (bit0 disabled);
 CGuiPanel +0xb0 (bit0 active, bit1 hidden). Callbacks: CGuiButton obj +0x90 / fn +0x98; check / radio box obj +0x80 /
 fn +0x88 (int checked, state +0x90); CGuiTimerButton +0xd0 / +0xd8; tab buttons: index +0xa0, tab set +0xa8
 (array +0x18 / count +0x20, selected +0x10), click with ?HandleTabClick@CGuiTabSet@@IEAAXH@Z.
@@ -185,7 +185,7 @@ CGuiButtonListbox: selected +0x90, rows +0x98 / count +0xa0, ids +0x420 / count 
 Skill rows: timer up / down buttons; feat / spell rows: CGuiMouseoverChildButton add-remove arrow then info.
 
 ## Level-up and character creation (Win)
-Level-up mode: CGuiInGame+0x2c. Start level-up: 0x1406f5c20 (CGuiInGame::HandleLevelUpButton).
+Level-up mode: CGuiInGame+0x2c. Start level-up: 0x1406f85b0 (CGuiInGame::HandleLevelUpButton).
 Panels (layout names in brackets): CCharacterClassPanel (ClassListBox), CCharacterLevelUpAbilitiesPanel /
 CCharacterAbilitiesPanel (StrLabel/StrEdit/StrUpButton/StrDownButton ..., PointsEdit), CCharacterSkillsPanel
 (SkillsButtonBox), CCharacterFeatsPanel / CCharacterSpellsPanel (AvailBox, KnownBox, SpellLevel0..9),
@@ -204,7 +204,7 @@ Creature stats: gender +0x68, law/chaos +0xc6, good/evil +0xc8 (short, >= 70 law
 Hook ?Activate@CGuiModalPanel@@QEAAXXZ; classes CPanelOk, CPanelOkCancel, CPanelOkScroll, CPanelYesNoCancel.
 Buttons: exported OnOkButtonPressed / OnCancelButtonPressed / HandleYes/No/CancelButton.
 Game state icons over the portrait (level up 1, time stop 2, pause 4): CGuiInGame+0x370 bits;
-AddGameState 0x1406f3a40 (gig, mask), RemoveGameState 0x1406f7a80 (gig, mask).
+AddGameState 0x1406f63d0 (gig, mask), RemoveGameState 0x1406fa410 (gig, mask).
 
 ## Health of other creatures
 Exact HP (update flag 0x400 -> stats +0x84..0x8a) is sent only for creatures in the player's party
@@ -212,4 +212,4 @@ Exact HP (update flag 0x400 -> stats +0x84..0x8a) is sent only for creatures in 
 0 >= 95%, 1 >= 75%, 2 >= 50%, 3 >= 25%, 4 alive, 5 dead; CNWSObject::GetDamageLevel). Non-party stats show 1/1.
 
 ## Walking to a point
-CClientExoAppInternal::WalkPlayerToPoint 0x1406f0cc0 (internal, x, y, z, flags 0, target 0x7f000000, 0).
+CClientExoAppInternal::WalkPlayerToPoint 0x1406f3650 (internal, x, y, z, flags 0, target 0x7f000000, 0).

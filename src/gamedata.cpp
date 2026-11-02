@@ -25,9 +25,9 @@ LocGet_t fLocGet = nullptr;
 
 namespace GD {
 void Init() {
-    fGetObjectName = (GetObjectName_t)A(0x1406a9630);
+    fGetObjectName = (GetObjectName_t)A(0x1406abfc0);
     fExoDtor = (ExoDtor_t)GetProcAddress(GetModuleHandleA(nullptr), "??1CExoString@@QEAA@XZ");
-    fGetLevel = (GetLevel_t)A(0x1407f4870);
+    fGetLevel = (GetLevel_t)A(0x1407f5d70);
     fLocGet = (LocGet_t)GetProcAddress(GetModuleHandleA(nullptr), "?GetString@CExoLocString@@QEBAHHPEAVCExoString@@E_N@Z");
 }
 
@@ -149,7 +149,7 @@ bool IsPaused() {
     typedef int (*fn)(void*, uint8_t);
     void* app = App();
     if (!app) return false;
-    return ((fn)A(0x1406a96a0))(app, 2) != 0;
+    return ((fn)A(0x1406ac030))(app, 2) != 0;
 }
 
 // Single player: the server's icon list (CNWSEffectListHandler::OnApplyEffectIcon) - CEffectIconObject
@@ -175,8 +175,8 @@ std::vector<FxIcon> EffectList(void* cre) {
     static auto fDiff = (uint64_t (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t))GetProcAddress(exe, "?GetTimeDifference@CWorldTimer@@QEAA_KIIII@Z");
     static auto fInt = (int (*)(void*, int))GetProcAddress(exe, "?GetInteger@CGameEffect@@QEAAHH@Z");
     static void** am = (void**)GetProcAddress(exe, "?g_pAppManager@@3PEAVCAppManager@@EA");
-    const uint16_t TypeIcon = (uint16_t)*(int*)G::A(0x140de567c);          // CGameEffect type of EffectIcon()
-    const int DurEquipped = *(int*)G::A(0x140de5474);                      // CGameEffect::DURATION_TYPE_EQUIPPED
+    const uint16_t TypeIcon = (uint16_t)*(int*)G::A(0x140de7a3c);          // CGameEffect type of EffectIcon()
+    const int DurEquipped = *(int*)G::A(0x140de7834);                      // CGameEffect::DURATION_TYPE_EQUIPPED
     const int DurInnate = 4;                                               // CGameEffect::DURATION_TYPE_INNATE
     const uint16_t TypeHaste = 1, TypeSlow = 3, TypeHasteInt = 0x29, TypeSlowInt = 0x2a;   // OnApplyHasteOrSlow
     void* srv = am && *am ? F<void*>(*am, 8) : nullptr;

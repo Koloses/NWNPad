@@ -537,7 +537,7 @@ void CharacterInput() {
     if (g_pad.Pressed(PB_X) && LevelUpReady()) {
         Hub_Close();
         typedef void (*fn)();
-        ((fn)A(0x1406f5c20))();          // CGuiInGame::HandleLevelUpButton
+        ((fn)A(0x1406f85b0))();          // CGuiInGame::HandleLevelUpButton
         Log("hub: level up");
         return;
     }

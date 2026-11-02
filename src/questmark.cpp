@@ -39,8 +39,8 @@ bool g_debugTargets = false;           // log the targets of every quest on the 
 typedef void* (*GetSrvObj_t)(void* srv, uint32_t id);
 GetSrvObj_t fSrvGameObject = nullptr, fSrvCreature = nullptr;
 typedef void* (*Thiscall0_t)(void*);
-const uintptr_t VA_SrvGetModule = 0x1405599a0, VA_GetJournal = 0x14038fb10, VA_LookupTarget = 0x1404fc930;
-const uintptr_t VA_SrvAreaById = 0x1405595a0;
+const uintptr_t VA_SrvGetModule = 0x14055b6e0, VA_GetJournal = 0x140391790, VA_LookupTarget = 0x1404fe6e0;
+const uintptr_t VA_SrvAreaById = 0x14055b2e0;
 void* Srv() {
     static void** am = (void**)GetProcAddress(GetModuleHandleA(nullptr), "?g_pAppManager@@3PEAVCAppManager@@EA");
     void* s = am && *am ? F<void*>(*am, 8) : nullptr;

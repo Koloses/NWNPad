@@ -1,6 +1,6 @@
 # NWNPad
 
-Xbox / XInput gamepad mod for **Neverwinter Nights: Enhanced Edition** (Windows, build 8193.37).
+Xbox / XInput gamepad mod for **Neverwinter Nights: Enhanced Edition** (Windows, build 89.8193.37-17).
 It plays like a modern twin-stick action RPG and replaces the mouse-driven interface with
 gamepad screens: HUD with minimap, conversation window, hub menu (inventory, character,
 quickbar, spells, journal, map, system), loot window, merchant, party orders, game pop-ups,

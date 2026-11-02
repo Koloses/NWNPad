@@ -22,11 +22,11 @@ using namespace G;
 using namespace R;
 
 namespace {
-const uintptr_t VA_GuiInGame_HandleOptionsButton = 0x1406f5d30;   // opens / closes COptionsPanel (GIG+0xd8)
-const uintptr_t VA_App_SavingAllowed = 0x1406a9aa0;              // 0 = multiplayer client (no save / load)
-const uintptr_t VA_SaveGameList_Ctor = 0x140813550;              // CSaveGameList::CSaveGameList (reads SAVES:, sorted)
-const uintptr_t VA_Internal_SendSaveGame = 0x1406dc910;          // (internal, number, name, module, overwrite dir)
-const uintptr_t VA_Internal_SendLoadGame = 0x1406dc8f0;          // (internal, number, name, file, 0)
+const uintptr_t VA_GuiInGame_HandleOptionsButton = 0x1406f86c0;   // opens / closes COptionsPanel (GIG+0xd8)
+const uintptr_t VA_App_SavingAllowed = 0x1406ac430;              // 0 = multiplayer client (no save / load)
+const uintptr_t VA_SaveGameList_Ctor = 0x140814a50;              // CSaveGameList::CSaveGameList (reads SAVES:, sorted)
+const uintptr_t VA_Internal_SendSaveGame = 0x1406df2a0;          // (internal, number, name, module, overwrite dir)
+const uintptr_t VA_Internal_SendLoadGame = 0x1406df280;          // (internal, number, name, file, 0)
 
 // COptionsPanel button callbacks (Win): {object, function} pairs filled in PostAttachmentInitialize
 const size_t OP_SaveChar = 0x418, OP_Video = 0x500, OP_Controls = 0x6d0, OP_Exit = 0x7b8, OP_Game = 0x988;

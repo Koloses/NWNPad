@@ -20,9 +20,9 @@ using namespace G;
 using namespace R;
 
 namespace {
-const uintptr_t VA_ShowDialogEntry = 0x1406f8bd0;
-const uintptr_t VA_ShowDialogReplies = 0x1406f8f50;
-const uintptr_t VA_HandleDialogSelection = 0x1406f5850;
+const uintptr_t VA_ShowDialogEntry = 0x1406fb560;
+const uintptr_t VA_ShowDialogReplies = 0x1406fb8e0;
+const uintptr_t VA_HandleDialogSelection = 0x1406f81e0;
 
 void (*o_ShowDialogEntry)(void* gig, void* text, uint32_t p3, uint32_t speaker) = nullptr;
 void (*o_ShowDialogReplies)(void* gig, int n, void* strs, uint32_t* ids, int p4, uint32_t p5, int p6) = nullptr;
